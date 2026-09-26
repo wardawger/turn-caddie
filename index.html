@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turn Caddie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+:root{
+  color-scheme: dark;
+  --ground:#0f1a14;
+  --ground-2:#15241c;
+  --panel:#1a2b22;
+  --line:rgba(233,227,213,.14);
+  --line-strong:rgba(233,227,213,.28);
+  --bone:#ebe5d7;
+  --muted:#a7b0a3;
+  --leather:#d19561;
+  --leather-deep:#8a5530;
+  --brass:#cdb07a;
+  --card:#e9e1cf;
+  --card-ink:#1d2a22;
+  --card-rule:#b9ad93;
+  --display:"Gloock", "Iowan Old Style", Georgia, serif;
+  --body:"Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--ground)}
+body{background:var(--ground);color:var(--bone);font-family:var(--body);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1300px;margin:0 auto;padding-inline:20px}
+a{color:var(--leather)}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-block:22px;border-bottom:1px solid var(--line)}
+.mark{display:flex;align-items:baseline;gap:10px;text-decoration:none;color:var(--bone)}
+.mark b{font-family:var(--display);font-weight:400;font-size:26px;letter-spacing:.01em}
+.mark span{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.top nav{display:flex;gap:22px;flex-wrap:wrap}
+.top nav a{color:var(--muted);text-decoration:none;font-size:14px;font-weight:500}
+.top nav a:hover{color:var(--bone)}
+
+/* hero / configurator */
+.hero{display:grid;grid-template-columns:minmax(0,.86fr) minmax(0,1.24fr);grid-template-areas:"copy stage" "feats stage";column-gap:48px;row-gap:28px;padding-block:44px 64px;align-items:start}
+.copy{grid-area:copy}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--brass)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(46px,6.2vw,88px);line-height:.94;letter-spacing:-.015em;margin:14px 0 18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--leather)}
+.lede{font-size:18px;color:#cfd4c9;max-width:44ch;margin:0}
+
+.feats{grid-area:feats;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.feat{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:14px 4px 14px 0}
+.feat-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.feat-name{font-size:18px;font-weight:600;color:var(--muted);transition:color .2s}
+.feat-spec{font-family:var(--mono);font-size:12px;color:var(--muted);opacity:.8;font-variant-numeric:tabular-nums;text-align:right}
+.feat:hover .feat-name{color:var(--bone)}
+.feat[aria-pressed="true"] .feat-name{color:var(--bone)}
+.feat[aria-pressed="true"] .feat-spec{color:var(--brass);opacity:1}
+.feat-body{display:none;margin:8px 0 2px;color:#cfd4c9;font-size:15.5px;max-width:52ch}
+.feat[aria-pressed="true"] .feat-body{display:block}
+.feat-name::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:12px;background:transparent;border:1.5px solid var(--line-strong);vertical-align:2px;transition:background .2s,border-color .2s}
+.feat[aria-pressed="true"] .feat-name::before{background:var(--leather);border-color:var(--leather)}
+
+.stage{grid-area:stage;position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);border-radius:22px;overflow:hidden;background:
+  radial-gradient(120% 80% at 50% 38%, #2a4033 0%, #1a2b22 48%, #121e18 100%);
+  border:1px solid var(--line)}
+.stage-canvas{position:relative;height:clamp(440px,52vw,680px)}
+#c{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#c:active{cursor:grabbing}
+.stage-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;color:var(--muted);text-align:center;padding:24px;pointer-events:none}
+.pins{position:absolute;inset:0;pointer-events:none}
+.pin{position:absolute;left:0;top:0;display:flex;align-items:center;gap:8px;padding:0;border:0;background:none;pointer-events:auto;transition:opacity .25s}
+.pin .dot{width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:rgba(15,26,20,.55);border:1.5px solid var(--bone);display:grid;place-items:center;backdrop-filter:blur(4px)}
+.pin .dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--bone)}
+.pin .lbl{margin-top:-13px;font-size:12.5px;font-weight:600;background:rgba(15,26,20,.8);border:1px solid var(--line-strong);padding:4px 9px;border-radius:999px;white-space:nowrap;opacity:0;transform:translateX(-4px);transition:opacity .2s,transform .2s}
+.pin:hover .lbl,.pin:focus-visible .lbl,.pin.on .lbl{opacity:1;transform:none}
+.pin.on .dot{border-color:var(--leather);background:rgba(209,149,97,.25)}
+.pin.on .dot::after{background:var(--leather)}
+.pin.away{opacity:0;pointer-events:none}
+
+.stage-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;padding:14px 18px;border-top:1px solid var(--line);background:rgba(15,26,20,.55)}
+.ways{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ways-label{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.way{display:flex;align-items:center;gap:8px;background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 6px;font-size:13px;color:var(--muted);min-height:36px}
+.way i{display:block;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--a) 0 50%,var(--b) 50% 100%);border:1px solid rgba(255,255,255,.25)}
+.way[aria-pressed="true"]{border-color:var(--leather);color:var(--bone)}
+.tools{display:flex;gap:8px}
+.tool{background:none;border:1px solid var(--line-strong);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;min-height:36px}
+.tool:hover{border-color:var(--bone)}
+.hint{font-family:var(--mono);font-size:11px;color:var(--muted);position:absolute;left:18px;top:16px;letter-spacing:.06em;pointer-events:none}
+
+/* sections */
+section.block{padding-block:72px;border-top:1px solid var(--line)}
+.sec-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:end;margin-bottom:36px}
+h2{font-family:var(--display);font-weight:400;font-size:clamp(34px,4.2vw,56px);line-height:1;margin:10px 0 0;text-wrap:balance}
+.sec-head p{margin:0;color:#cfd4c9;max-width:48ch}
+
+/* scorecard */
+.card-wrap{overflow-x:auto;border-radius:14px}
+.scorecard{width:100%;min-width:620px;border-collapse:collapse;background:var(--card);color:var(--card-ink);font-size:15px}
+.scorecard caption{caption-side:bottom;text-align:left;font-family:var(--mono);font-size:11.5px;color:var(--muted);padding-top:12px;letter-spacing:.04em}
+.scorecard th{background:#24392d;color:var(--card);font-family:var(--mono);font-weight:600;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;text-align:left;padding:12px 16px}
+.scorecard td{padding:13px 16px;border-top:1px solid var(--card-rule);border-right:1px solid var(--card-rule);vertical-align:top}
+.scorecard td:last-child{border-right:0;color:#4a5449}
+.scorecard td.no{width:64px;text-align:center;font-family:var(--mono);font-weight:600;color:#6b5c3f;background:#e0d6bf}
+.scorecard td.m{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scorecard tr.total td{background:#ddd2b8;font-weight:700}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{counter-increment:s;padding:26px 24px 28px;border:1px solid var(--line);border-radius:16px;background:var(--ground-2);display:flex;flex-direction:column;gap:10px}
+.steps li::before{content:counter(s);font-family:var(--display);font-size:44px;line-height:1;color:var(--leather)}
+.steps h3{margin:0;font-size:19px;font-weight:600}
+.steps p{margin:0;color:#cfd4c9;font-size:15.5px}
+
+/* closing */
+.close{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:40px;align-items:center}
+.price{border:1px solid var(--line-strong);border-radius:18px;padding:28px;display:flex;flex-direction:column;gap:14px;background:var(--ground-2)}
+.price .row{display:flex;justify-content:space-between;gap:16px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.price .row:last-child{border-bottom:0;padding-bottom:0}
+.price .k{color:var(--muted);font-size:14px}
+.price .v{font-family:var(--mono);font-weight:600;text-align:right}
+.price .big{font-family:var(--display);font-size:40px;font-weight:400}
+footer{padding-block:28px 40px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+@media (max-width: 900px){
+  .hero{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "stage" "feats";padding-block:28px 48px}
+  .stage{position:relative;top:0}
+  .stage-canvas{height:clamp(380px,100vw,540px)}
+  .sec-head,.close{grid-template-columns:minmax(0,1fr)}
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .top nav{display:none}
+}
+@media (prefers-reduced-motion: reduce){
+  *{transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="#top" aria-label="Turn Caddie, back to top"><b>Turn Caddie</b><span>Cart-side caddie</span></a>
+    <nav aria-label="Page sections">
+      <a href="#explore">Explore</a>
+      <a href="#specs">Specs</a>
+      <a href="#bay">The tin pod</a>
+      <a href="#order">Order</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="hero" id="explore">
+      <div class="copy">
+        <div class="eyebrow">Magnetic drink caddie · tin pod built in</div>
+        <h1>Nothing in your <em>pockets.</em></h1>
+        <p class="lede">A stitched-leather caddie that sticks to the cart and holds your can, three tees, a ball marker and your tin. The tin rides in a round pod right under the can, shut with a magnetic latch.</p>
+      </div>
+
+      <div class="stage" aria-label="Interactive 3D model of the Turn Caddie">
+        <div class="stage-canvas" id="stageCanvas">
+          <canvas id="c" aria-label="3D model. Drag to rotate, scroll or pinch to zoom." tabindex="0"></canvas>
+          <div class="pins" id="pins"></div>
+          <div class="stage-note" id="note">Loading the 3D model…</div>
+          <div class="hint" id="hint">Drag to turn · pinch or scroll to zoom</div>
+        </div>
+        <div class="stage-bar">
+          <div class="ways" role="group" aria-label="Colorway">
+            <span class="ways-label">Colorway</span>
+            <button class="way" type="button" data-way="0" aria-pressed="true" style="--a:#8a5530;--b:#4d6039"><i></i>Saddle &amp; Fairway</button>
+            <button class="way" type="button" data-way="1" aria-pressed="false" style="--a:#5a3824;--b:#263349"><i></i>Tobacco &amp; Navy</button>
+            <button class="way" type="button" data-way="2" aria-pressed="false" style="--a:#c09a70;--b:#262422"><i></i>Sand &amp; Black</button>
+          </div>
+          <div class="tools">
+            <button class="tool" type="button" id="reset">Reset view</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="feats" id="feats" role="group" aria-label="Features"></div>
+    </div>
+
+    <section class="block" id="specs">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow">Spec card</div>
+          <h2>Measured like a scorecard.</h2>
+        </div>
+        <p>Every dimension that decides what fits. The pod is sized around the standard 2.75-inch tin with a few millimetres of clearance, so it sits without rattling.</p>
+      </div>
+      <div class="card-wrap">
+        <table class="scorecard">
+          <caption>All measurements nominal · prototype stage</caption>
+          <thead><tr><th scope="col">No.</th><th scope="col">Part</th><th scope="col">Measure</th><th scope="col">Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="no">1</td><td>Tin pod, inside</td><td class="m">Ø77 × 26 mm</td><td>Standard tins, Ø70 × 20 mm</td></tr>
+            <tr><td class="no">2</td><td>Pod door</td><td class="m">140° arc</td><td>Steel pin hinge, opens about 110°</td></tr>
+            <tr><td class="no">3</td><td>Mini tin, with ring</td><td class="m">Ø51 × 17 mm</td><td>Leather drop-in ring</td></tr>
+            <tr><td class="no">4</td><td>Can sleeve</td><td class="m">Ø66 × 122 mm</td><td>12 oz cans, neoprene lined</td></tr>
+            <tr><td class="no">5</td><td>Tee loops</td><td class="m">3 × 70 mm</td><td>2¾ in tees</td></tr>
+            <tr><td class="no">6</td><td>Magnet</td><td class="m">N52 plate</td><td>Full height, rear face</td></tr>
+            <tr class="total"><td class="no">Out</td><td>Overall, can seated</td><td class="m">Ø86 × 152 mm</td><td>Pod and sleeve share one axis</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block" id="bay">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow">The tin pod</div>
+          <h2>Lift, swing, click shut.</h2>
+        </div>
+        <p>The pod sits on the same axis as the can, so the caddie stays one clean cylinder. The door opens away from the cart, so you never lift the caddie off the frame.</p>
+      </div>
+      <ol class="steps">
+        <li><h3>Lift the tab</h3><p>The magnet lets go with a light pull on the leather latch tab.</p></li>
+        <li><h3>Swing the door</h3><p>The curved door pivots on a steel pin and the tin slides out onto your palm.</p></li>
+        <li><h3>Push it closed</h3><p>Nudge the door back and the magnet pulls it shut against the steel strike.</p></li>
+      </ol>
+    </section>
+
+    <section class="block" id="order">
+      <div class="close">
+        <div>
+          <div class="eyebrow">First run</div>
+          <h2>Three colorways. One less thing in your pocket.</h2>
+          <p class="lede" style="margin-top:16px">Stitched leather over a molded pod, with the mini tin ring in the box.</p>
+        </div>
+        <div class="price">
+          <div class="row"><span class="k">Price</span><span class="v big">[YOUR PRICE]</span></div>
+          <div class="row"><span class="k">In the box</span><span class="v">Caddie · 3 tees · mini tin ring</span></div>
+          <div class="row"><span class="k">Ships</span><span class="v">[LAUNCH DATE]</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Turn Caddie · product concept</span>
+    <span>3D model is illustrative; final materials may differ.</span>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- feature content ---------- */
+const FEATURES = [
+  {id:"overview", name:"The whole caddie", spec:"≈ Ø8.6 × 15 cm",
+   body:"One magnetic caddie for your drink, three tees, a ball marker and a tin. Drag the model to turn it, or pick a feature below.",
+   cam:[30,20,40], tgt:[0,7,0], state:{}},
+  {id:"bay", name:"Round tin pod", spec:"Fits Ø70 × 20 mm tins", pin:"Tin pod",
+   body:"The base is a round pod on the same axis as the can, sized to a standard 2.75-inch tin. A curved door swings open and the tin slides out.",
+   cam:[-4,12,34], tgt:[-2.5,2.5,3], state:{door:1, tin:1}},
+  {id:"latch", name:"Magnetic latch", spec:"No snaps, no zips", pin:"Magnetic latch",
+   body:"A leather tab on the door hides a magnet that clicks onto a steel strike on the pod. Lift the tab to open; push the door and it pulls itself shut.",
+   cam:[24,9,26], tgt:[3,2,2], state:{door:0.28}},
+  {id:"sleeve", name:"Insulated can sleeve", spec:"Ø66 × 122 mm cans", pin:"Can sleeve",
+   body:"Neoprene-lined leather keeps a 12 oz can cold. A sewn floor separates the can from the tin pod below.",
+   cam:[16,32,28], tgt:[0,12,0], state:{can:1}},
+  {id:"pocket", name:"Snap stash pocket", spec:"Snap flap", pin:"Stash pocket",
+   body:"A leather pocket with a snap flap holds a ball marker, a divot tool or your keys.",
+   cam:[-7,14,31], tgt:[0,8.5,3], state:{flap:1}},
+  {id:"tees", name:"Three tee loops", spec:"3 × 2¾ in tees", pin:"Tee loops",
+   body:"Canvas loops on the side hold three tees, so you are not digging through the bag on the box.",
+   cam:[31,15,21], tgt:[2.5,9.5,2], state:{tees:1}},
+  {id:"magnet", name:"N52 magnet plate", spec:"Rear face + D-ring", pin:"Magnet plate",
+   body:"A full-height magnet plate clings to the cart frame through rough paths. After the round, clip the D-ring to your bag.",
+   cam:[-20,17,-33], tgt:[0,9,-3], state:{}},
+  {id:"shim", name:"Mini tin ring", spec:"Ø51 × 17 mm tins", pin:"Mini tin ring",
+   body:"Carry the 2-inch mini tin? Drop the leather ring into the pod and it holds the smaller tin centered.",
+   cam:[24,13,31], tgt:[5,2.5,5], state:{door:1, shim:1}},
+  {id:"exploded", name:"Exploded view", spec:"9 parts",
+   body:"Every part pulled apart: can, sleeve, pocket, tee loops, magnet plate, pod lid, pod door, tin and the mini tin ring.",
+   cam:[48,32,60], tgt:[0,12,2], state:{explode:1}}
+];
+const WAYS = [
+  {top:"#8a5530", base:"#4d6039"},
+  {top:"#5a3824", base:"#263349"},
+  {top:"#c09a70", base:"#262422"}
+];
+
+/* ---------- build the feature list (works even if 3D fails) ---------- */
+const featsEl = document.getElementById("feats");
+FEATURES.forEach(f=>{
+  const b = document.createElement("button");
+  b.type="button"; b.className="feat"; b.dataset.id=f.id; b.setAttribute("aria-pressed", f.id==="overview"?"true":"false");
+  b.innerHTML = '<span class="feat-head"><span class="feat-name"></span><span class="feat-spec"></span></span><span class="feat-body"></span>';
+  b.querySelector(".feat-name").textContent=f.name;
+  b.querySelector(".feat-spec").textContent=f.spec;
+  b.querySelector(".feat-body").textContent=f.body;
+  b.addEventListener("click", ()=>select(f.id));
+  featsEl.appendChild(b);
+});
+let select = function(id){ markActive(id); };
+function markActive(id){
+  featsEl.querySelectorAll(".feat").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.id===id)));
+  document.querySelectorAll(".pin").forEach(p=>p.classList.toggle("on", p.dataset.id===id));
+}
+
+const note = document.getElementById("note");
+if (typeof THREE==="undefined" || !THREE.OrbitControls || !THREE.RoundedBoxGeometry){
+  note.textContent="The 3D model could not load. The feature list still describes every part.";
+  return;
+}
+
+const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+THREE.ColorManagement.legacyMode = false;
+
+const holder = document.getElementById("stageCanvas");
+const canvas = document.getElementById("c");
+let renderer;
+try{
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+}catch(e){
+  note.textContent="Your browser could not start WebGL, so the 3D model is unavailable.";
+  return;
+}
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(30, 1, 1, 500);
+camera.position.set(30,20,40);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enablePan = false;
+controls.minDistance = 20;
+controls.maxDistance = 85;
+controls.maxPolarAngle = Math.PI*0.495;
+controls.target.set(0,7.5,0);
+controls.autoRotateSpeed = 0.7;
+
+/* lights */
+scene.add(new THREE.HemisphereLight(0xfff4e2, 0x1c2a22, 0.35));
+const key = new THREE.DirectionalLight(0xfff1dc, 1.6);
+key.position.set(18,34,22);
+key.castShadow = true;
+key.shadow.mapSize.set(1024,1024);
+key.shadow.camera.left=-22; key.shadow.camera.right=22; key.shadow.camera.top=22; key.shadow.camera.bottom=-22;
+key.shadow.camera.near=10; key.shadow.camera.far=90;
+key.shadow.bias=-0.0008;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xbfd6ff, 0.55);
+rim.position.set(-24,18,-20);
+scene.add(rim);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.ShadowMaterial({opacity:0.34}));
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ---------- textures ---------- */
+function grainCanvas(){
+  const s=512, c=document.createElement("canvas"); c.width=c.height=s;
+  const g=c.getContext("2d");
+  g.fillStyle="#f2f2f2"; g.fillRect(0,0,s,s);
+  for(let i=0;i<9000;i++){
+    const x=Math.random()*s, y=Math.random()*s, r=0.8+Math.random()*2.4;
+    g.fillStyle="rgba(0,0,0,"+(0.025+Math.random()*0.035)+")";
+    g.beginPath(); g.ellipse(x,y,r,r*(0.6+Math.random()*0.5),Math.random()*3,0,Math.PI*2); g.fill();
+    g.fillStyle="rgba(255,255,255,0.03)";
+    g.beginPath(); g.ellipse(x-0.8,y-0.8,r*0.5,r*0.35,0,0,Math.PI*2); g.fill();
+  }
+  return c;
+}
+const grainSrc = grainCanvas();
+function grainTex(rx,ry,srgb){
+  const t = new THREE.CanvasTexture(grainSrc);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(rx,ry);
+  if(srgb) t.encoding = THREE.sRGBEncoding;
+  t.anisotropy = 4;
+  return t;
+}
+function textTex(w,h,draw){
+  const c=document.createElement("canvas"); c.width=w; c.height=h;
+  draw(c.getContext("2d"),w,h);
+  const t=new THREE.CanvasTexture(c); t.encoding=THREE.sRGBEncoding; t.anisotropy=4;
+  t.userData.draw = draw;
+  return t;
+}
+
+/* ---------- materials ---------- */
+const topMats=[], baseMats=[];
+function leather(kind, rx, ry){
+  const m = new THREE.MeshStandardMaterial({
+    color: kind==="top"?WAYS[0].top:WAYS[0].base,
+    map: grainTex(rx,ry,true), bumpMap: grainTex(rx,ry,false), bumpScale: 0.018,
+    roughness: 0.62, metalness: 0, envMapIntensity: 0.45
+  });
+  (kind==="top"?topMats:baseMats).push(m);
+  return m;
+}
+const matNeo = new THREE.MeshStandardMaterial({color:"#141414", roughness:0.92});
+const matDark = new THREE.MeshStandardMaterial({color:"#0b0f0c", roughness:0.95});
+const matSteel = new THREE.MeshStandardMaterial({color:"#c9ccd0", metalness:1, roughness:0.28});
+const matMagnet = new THREE.MeshStandardMaterial({color:"#44474b", metalness:0.9, roughness:0.38});
+const matStitch = new THREE.MeshStandardMaterial({color:"#efe3c8", roughness:0.85});
+const matCanvasBand = new THREE.MeshStandardMaterial({color:"#e7dcc4", roughness:0.9, map:grainTex(1,1,true)});
+const matWood = new THREE.MeshStandardMaterial({color:"#c98f52", roughness:0.55});
+const matRib = new THREE.MeshStandardMaterial({color:"#26282a", roughness:0.7});
+const matTinBody = new THREE.MeshStandardMaterial({color:"#f4f4f1", roughness:0.45});
+const matAlu = new THREE.MeshStandardMaterial({color:"#d7d9dc", metalness:1, roughness:0.22});
+
+function mesh(geo, mat, cast){
+  const m = new THREE.Mesh(geo, mat);
+  if(cast!==false){ m.castShadow = true; m.receiveShadow = true; }
+  return m;
+}
+const RB = (w,h,d,r,seg)=> new THREE.RoundedBoxGeometry(w,h,d,seg||4,r);
+
+/* stitching as instanced dashes */
+const stitchGeo = new THREE.BoxGeometry(0.26,0.05,0.05);
+function stitchRing(parent, r, y, n){
+  const m = new THREE.InstancedMesh(stitchGeo, matStitch, n);
+  const d = new THREE.Object3D();
+  for(let i=0;i<n;i++){
+    const a=i/n*Math.PI*2;
+    d.position.set(Math.sin(a)*r, y, Math.cos(a)*r);
+    d.rotation.set(0,a,0); d.updateMatrix(); m.setMatrixAt(i,d.matrix);
+  }
+  parent.add(m); return m;
+}
+function stitchRect(parent, w, h, cx, cy, z){
+  const pts=[], step=0.62;
+  const edges=[[-w/2,h/2,w/2,h/2],[w/2,h/2,w/2,-h/2],[w/2,-h/2,-w/2,-h/2],[-w/2,-h/2,-w/2,h/2]];
+  edges.forEach(([x1,y1,x2,y2])=>{
+    const len=Math.hypot(x2-x1,y2-y1), n=Math.max(1,Math.floor(len/step));
+    for(let i=0;i<n;i++){ const t=(i+0.5)/n; pts.push([x1+(x2-x1)*t, y1+(y2-y1)*t, x1===x2]); }
+  });
+  const m = new THREE.InstancedMesh(stitchGeo, matStitch, pts.length);
+  const d = new THREE.Object3D();
+  pts.forEach((p,i)=>{ d.position.set(cx+p[0], cy+p[1], z); d.rotation.set(0,0,p[2]?Math.PI/2:0); d.updateMatrix(); m.setMatrixAt(i,d.matrix); });
+  parent.add(m); return m;
+}
+
+/* ---------- model ---------- */
+const caddie = new THREE.Group();
+scene.add(caddie);
+const anchors = {};
+function anchor(parent, id, x,y,z, dir){ const o=new THREE.Object3D(); o.position.set(x,y,z); parent.add(o); anchors[id]={obj:o, dir:dir}; }
+
+// round tin pod (same axis as the can)
+const R = 4.3, RIN = 3.85, WALL_H = 2.6, FLOOR = 0.35;
+const deg = d => d*Math.PI/180;
+function arcSolid(rIn, rOut, a0, a1, h){
+  const sh = new THREE.Shape();
+  sh.absarc(0,0,rOut,a0,a1,false);
+  sh.absarc(0,0,rIn,a1,a0,true);
+  sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh,{depth:h, bevelEnabled:false, curveSegments:72});
+  g.rotateX(-Math.PI/2);
+  return g;
+}
+function ringSolid(rIn, rOut, h){
+  const sh = new THREE.Shape(); sh.absarc(0,0,rOut,0,Math.PI*2,false);
+  const hole = new THREE.Path(); hole.absarc(0,0,rIn,0,Math.PI*2,true); sh.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(sh,{depth:h, bevelEnabled:false, curveSegments:72});
+  g.rotateX(-Math.PI/2); return g;
+}
+function stitchArc(parent, r, y, t0, t1, n){
+  const m = new THREE.InstancedMesh(stitchGeo, matStitch, n);
+  const d = new THREE.Object3D();
+  for(let i=0;i<n;i++){
+    const a = t0 + (t1-t0)*(i+0.5)/n;
+    d.position.set(Math.sin(a)*r, y, Math.cos(a)*r);
+    d.rotation.set(0,a,0); d.updateMatrix(); m.setMatrixAt(i,d.matrix);
+  }
+  parent.add(m); return m;
+}
+const pod = new THREE.Group();
+caddie.add(pod);
+const podLeather = leather("base",0.16,0.16);
+const podFloor = mesh(new THREE.CylinderGeometry(R,R,FLOOR,72), leather("base",6,1));
+podFloor.position.y = FLOOR/2; pod.add(podFloor);
+const backWall = mesh(arcSolid(RIN,R,deg(-20),deg(200),WALL_H), podLeather);
+backWall.position.y = FLOOR; pod.add(backWall);
+const lid = new THREE.Group(); pod.add(lid);
+const lidDisc = mesh(new THREE.CylinderGeometry(R,R,0.35,72), leather("base",6,1));
+lidDisc.position.y = FLOOR + WALL_H + 0.175; lid.add(lidDisc);
+const trimTop = mesh(new THREE.TorusGeometry(R,0.07,10,96), matSteel);
+trimTop.rotation.x = Math.PI/2; trimTop.position.y = FLOOR + WALL_H + 0.35; lid.add(trimTop);
+const trimBot = mesh(new THREE.TorusGeometry(R,0.07,10,96), matSteel);
+trimBot.rotation.x = Math.PI/2; trimBot.position.y = 0.04; pod.add(trimBot);
+stitchArc(pod, R+0.02, FLOOR+WALL_H-0.3, deg(70), deg(290), 34);
+// steel strike the latch magnet snaps to
+const sa = deg(80);
+const strike = mesh(new THREE.CylinderGeometry(0.34,0.34,0.06,32), matSteel);
+const strikeHolder = new THREE.Group();
+strikeHolder.position.set(Math.sin(sa)*(R+0.02), FLOOR+WALL_H/2, Math.cos(sa)*(R+0.02));
+strikeHolder.rotation.y = sa;
+strike.rotation.x = Math.PI/2; strikeHolder.add(strike); pod.add(strikeHolder);
+
+// curved door on a vertical pin hinge (front-left)
+const hingeA = deg(-160), hingeR = R + 0.18;
+const P = new THREE.Vector3(hingeR*Math.cos(hingeA), 0, -hingeR*Math.sin(hingeA));
+const doorPivot = new THREE.Group(); doorPivot.position.copy(P); pod.add(doorPivot);
+const door = new THREE.Group(); door.position.set(-P.x,0,-P.z); doorPivot.add(door);
+const doorWall = mesh(arcSolid(RIN,R,deg(-160),deg(-20),WALL_H), podLeather);
+doorWall.position.y = FLOOR; door.add(doorWall);
+stitchArc(door, R+0.02, FLOOR+0.3, deg(-66), deg(66), 22);
+stitchArc(door, R+0.02, FLOOR+WALL_H-0.3, deg(-66), deg(66), 22);
+const pin = mesh(new THREE.CylinderGeometry(0.2,0.2,WALL_H+0.1,20), matSteel);
+pin.position.set(P.x, FLOOR+WALL_H/2, P.z); pod.add(pin);
+[0.55, WALL_H-0.55].forEach(y=>{
+  const k = mesh(new THREE.CylinderGeometry(0.3,0.3,0.7,20), matSteel);
+  k.position.set(P.x, FLOOR+y, P.z); pod.add(k);
+});
+// magnetic latch tab on the door's free edge (front-right)
+const tabA = deg(76);
+const latch = new THREE.Group();
+latch.position.set(Math.sin(tabA)*(R+0.16), FLOOR+WALL_H/2, Math.cos(tabA)*(R+0.16));
+latch.rotation.y = tabA;
+door.add(latch);
+const tabMesh = mesh(RB(1.5,2.0,0.3,0.14,3), leather("top",1,1)); latch.add(tabMesh);
+const magDot = mesh(new THREE.CylinderGeometry(0.36,0.36,0.08,32), new THREE.MeshStandardMaterial({color:"#c9a86a", metalness:1, roughness:0.3}));
+magDot.rotation.x = Math.PI/2; magDot.position.z = 0.17; latch.add(magDot);
+stitchRect(latch, 1.2, 1.7, 0, 0, 0.16);
+anchor(door,"bay",0,1.9,R+0.2,[0,0,1]);
+anchor(latch,"latch",0,0,0.3,[Math.sin(tabA),0,Math.cos(tabA)]);
+
+// tin, sitting on the pod floor
+const tin = new THREE.Group();
+tin.position.set(0,FLOOR+0.02,0);
+pod.add(tin);
+const tinTop = textTex(512,512,(g,w)=>{
+  g.setTransform(-1,0,0,1,w,0);
+  g.fillStyle="#f6f6f3"; g.fillRect(0,0,w,w);
+  g.strokeStyle="#d9dcd8"; g.lineWidth=10; g.beginPath(); g.arc(w/2,w/2,w*0.43,0,Math.PI*2); g.stroke();
+  g.fillStyle="#3d5a45"; g.textAlign="center"; g.textBaseline="middle";
+  g.font="400 118px Gloock, Georgia, serif"; g.fillText("TURN", w/2, w/2-30);
+  g.font="600 40px 'JetBrains Mono', monospace"; g.fillText("POUCHES", w/2, w/2+70);
+});
+const tinBody = mesh(new THREE.CylinderGeometry(3.45,3.45,1.5,64), matTinBody);
+tinBody.position.y = 0.75; tin.add(tinBody);
+const tinLid = mesh(new THREE.CylinderGeometry(3.52,3.52,0.42,64), [matTinBody, new THREE.MeshStandardMaterial({map:tinTop, roughness:0.4}), matTinBody]);
+tinLid.position.y = 1.7; tinLid.rotation.y = Math.PI/2; tin.add(tinLid);
+
+// sleeve group
+const sleeve = new THREE.Group();
+sleeve.position.y = FLOOR + WALL_H + 0.35;
+caddie.add(sleeve);
+const outer = mesh(new THREE.CylinderGeometry(4.2,4.2,10.5,72,1,true), leather("top",9,3));
+outer.position.y = 5.25; sleeve.add(outer);
+const inner = new THREE.Mesh(new THREE.CylinderGeometry(3.55,3.55,10.3,48,1,true), new THREE.MeshStandardMaterial({color:"#171717", roughness:0.95, side:THREE.BackSide}));
+inner.position.y = 5.3; sleeve.add(inner);
+const rimMesh = mesh(new THREE.TorusGeometry(3.88,0.38,18,72), matNeo);
+rimMesh.rotation.x = Math.PI/2; rimMesh.position.y = 10.5; sleeve.add(rimMesh);
+stitchRing(sleeve, 4.23, 9.75, 70);
+stitchRing(sleeve, 4.23, 0.65, 70);
+anchor(sleeve,"sleeve",-3.9,10.7,0.6,null);
+
+// can
+const can = new THREE.Group();
+can.position.y = 0.25;
+sleeve.add(can);
+const label = textTex(1024,512,(g,w,h)=>{
+  g.fillStyle="#8f6440"; g.fillRect(0,0,w,h*0.62);
+  g.fillStyle="#efe6d4"; g.fillRect(0,h*0.62,w,h*0.38);
+  g.fillStyle="#d9b98f"; g.fillRect(0,h*0.6,w,h*0.025);
+  g.fillStyle="#efe6d4"; g.textAlign="center"; g.textBaseline="middle";
+  g.font="400 92px Gloock, Georgia, serif";
+  g.fillText("Turn Caddie", w*0.25, h*0.36); g.fillText("Turn Caddie", w*0.75, h*0.36);
+  g.fillStyle="#8f6440"; g.font="600 30px 'JetBrains Mono', monospace";
+  g.fillText("12 FL OZ · 355 mL", w*0.25, h*0.8); g.fillText("12 FL OZ · 355 mL", w*0.75, h*0.8);
+});
+const canBody = mesh(new THREE.CylinderGeometry(3.3,3.3,10.6,64), [new THREE.MeshStandardMaterial({map:label, roughness:0.35, metalness:0.25}), matAlu, matAlu]);
+canBody.position.y = 5.3; can.add(canBody);
+const shoulder = mesh(new THREE.CylinderGeometry(2.85,3.3,0.9,64), matAlu); shoulder.position.y = 11.05; can.add(shoulder);
+const lipR = mesh(new THREE.TorusGeometry(2.8,0.16,10,64), matAlu); lipR.rotation.x=Math.PI/2; lipR.position.y = 11.55; can.add(lipR);
+const lidTop = mesh(new THREE.CylinderGeometry(2.7,2.7,0.1,64), matAlu); lidTop.position.y = 11.42; can.add(lidTop);
+const tab = mesh(RB(1.1,0.08,1.9,0.2,2), matAlu); tab.position.set(0,11.52,0.6); can.add(tab);
+
+// stash pocket (front)
+const pocket = new THREE.Group();
+sleeve.add(pocket);
+const pocketBody = mesh(RB(5.0,5.2,1.4,0.4,4), leather("top",1,1));
+pocketBody.position.set(0,4.1,3.95); pocket.add(pocketBody);
+stitchRect(pocket, 4.3, 4.4, 0, 3.95, 4.66);
+const slot = new THREE.Mesh(new THREE.PlaneGeometry(4.2,0.55), matDark);
+slot.rotation.x = -Math.PI/2; slot.position.set(0,6.71,4.0); pocket.add(slot);
+const marker = mesh(new THREE.CylinderGeometry(0.85,0.85,0.12,40), matSteel);
+marker.rotation.x = Math.PI/2; marker.position.set(0.9,6.0,4.0); pocket.add(marker);
+const flapPivot = new THREE.Group();
+flapPivot.position.set(0,6.75,4.25); pocket.add(flapPivot);
+const flap = mesh(RB(5.35,2.3,0.38,0.16,4), leather("top",1,1));
+flap.position.set(0,-1.05,0.56); flapPivot.add(flap);
+stitchRect(flapPivot, 4.7, 1.7, 0, -1.1, 0.76);
+const snapTex = textTex(256,256,(g,w)=>{
+  const grd=g.createRadialGradient(w*0.4,w*0.4,10,w/2,w/2,w/2); grd.addColorStop(0,"#f4f5f6"); grd.addColorStop(1,"#a9adb2");
+  g.fillStyle=grd; g.fillRect(0,0,w,w);
+  g.fillStyle="#34373b"; g.textAlign="center"; g.textBaseline="middle";
+  g.font="600 30px 'JetBrains Mono', monospace"; g.fillText("THE", w/2, w/2-52);
+  g.font="400 56px Gloock, Georgia, serif"; g.fillText("Turn", w/2, w/2); g.fillText("Caddie", w/2, w/2+54);
+});
+const snap = mesh(new THREE.CylinderGeometry(0.78,0.82,0.22,40), [matSteel, new THREE.MeshStandardMaterial({map:snapTex, metalness:0.8, roughness:0.3}), matSteel]);
+snap.rotation.x = Math.PI/2; snap.position.set(0,-1.45,0.82); flapPivot.add(snap);
+anchor(pocket,"pocket",0,4.4,4.9,[0,0,1]);
+
+// tee loops (front-right)
+const teesRoot = new THREE.Group();
+teesRoot.rotation.y = 1.0;
+sleeve.add(teesRoot);
+const teesOut = new THREE.Group(); teesRoot.add(teesOut);
+const teeRack = new THREE.Group(); teesOut.add(teeRack);
+const teeSet = new THREE.Group(); teeRack.add(teeSet);
+[-1.15,0,1.15].forEach(x=>{
+  const band = mesh(RB(0.8,1.35,0.42,0.12,3), matCanvasBand);
+  band.position.set(x,5.2,4.33); teeRack.add(band);
+  const tee = new THREE.Group(); tee.position.set(x,0,4.62);
+  const head = mesh(new THREE.CylinderGeometry(0.55,0.16,0.5,24), matWood); head.position.y = 8.4; tee.add(head);
+  const shaft = mesh(new THREE.CylinderGeometry(0.16,0.14,5.6,16), matWood); shaft.position.y = 5.35; tee.add(shaft);
+  const tip = mesh(new THREE.ConeGeometry(0.14,0.7,16), matWood); tip.rotation.x = Math.PI; tip.position.y = 2.2; tee.add(tip);
+  teeSet.add(tee);
+});
+anchor(teeRack,"tees",0,7.4,4.9,[Math.sin(1.0),0,Math.cos(1.0)]);
+
+// magnet plate (back)
+const magnet = new THREE.Group();
+sleeve.add(magnet);
+const magTab = mesh(RB(4.6,7.4,0.6,0.3,4), leather("top",1,1));
+magTab.position.set(0,5.4,-4.32); magnet.add(magTab);
+const magPlate = mesh(RB(3.7,6.2,0.2,0.12,3), matMagnet);
+magPlate.position.set(0,5.4,-4.68); magnet.add(magPlate);
+stitchRect(magnet, 4.15, 6.95, 0, 5.4, -4.64);
+const strap = mesh(RB(1.4,2.4,0.26,0.1,3), leather("top",1,1));
+strap.position.set(0,10.6,-4.55); magnet.add(strap);
+const ring = mesh(new THREE.TorusGeometry(1.0,0.17,14,48), matSteel);
+ring.position.set(0,12.35,-4.55); ring.rotation.y = Math.PI/2; magnet.add(ring);
+anchor(magnet,"magnet",0,5.6,-5.0,[0,0,-1]);
+
+// mini tin ring (loose accessory)
+const shim = new THREE.Group();
+shim.position.set(12,0,7.5);
+caddie.add(shim);
+const shimRing = mesh(ringSolid(2.62,3.8,1.0), leather("top",0.2,0.2)); shim.add(shimRing);
+stitchArc(shim, 3.2, 1.03, 0, Math.PI*2, 30);
+anchor(shim,"shim",0,1.2,3.4,[0.8,0,0.6]);
+
+/* ---------- pins ---------- */
+const pinsEl = document.getElementById("pins");
+const pinEls = {};
+FEATURES.forEach(f=>{
+  if(!f.pin || !anchors[f.id]) return;
+  const b=document.createElement("button");
+  b.type="button"; b.className="pin"; b.dataset.id=f.id;
+  b.setAttribute("aria-label","Show "+f.name);
+  b.innerHTML='<span class="dot"></span><span class="lbl"></span>';
+  b.querySelector(".lbl").textContent=f.pin;
+  b.addEventListener("click",()=>select(f.id));
+  pinsEl.appendChild(b); pinEls[f.id]=b;
+});
+
+/* ---------- state + animation ---------- */
+const S = {door:0, tin:0, can:0, flap:0, tees:0, shim:0, explode:0};
+const T = Object.assign({}, S);
+let active = "overview";
+let camAnim = null;
+let lastUser = -1e9;
+
+function framing(f){
+  const tgt = new THREE.Vector3().fromArray(f.tgt);
+  const pos = new THREE.Vector3().fromArray(f.cam);
+  const aspect = holder.clientWidth/Math.max(1,holder.clientHeight);
+  const k = aspect < 0.8 ? 1.45 : aspect < 1.1 ? 1.2 : 1;
+  pos.sub(tgt).multiplyScalar(k).add(tgt);
+  return {pos, tgt};
+}
+select = function(id){
+  const f = FEATURES.find(x=>x.id===id); if(!f) return;
+  active = id; markActive(id);
+  Object.keys(T).forEach(k=>T[k]=f.state[k]||0);
+  const fr = framing(f);
+  if(reduced){
+    camera.position.copy(fr.pos); controls.target.copy(fr.tgt);
+    Object.keys(S).forEach(k=>S[k]=T[k]);
+  } else {
+    camAnim = {t:0, fromP:camera.position.clone(), fromT:controls.target.clone(), toP:fr.pos, toT:fr.tgt};
+  }
+  controls.autoRotate = false;
+  kick();
+};
+controls.addEventListener("start",()=>{ camAnim=null; lastUser=performance.now(); controls.autoRotate=false; document.getElementById("hint").hidden=true; });
+
+document.getElementById("reset").addEventListener("click",()=>select("overview"));
+document.querySelectorAll(".way").forEach(b=>b.addEventListener("click",()=>{
+  const w = WAYS[+b.dataset.way];
+  topMats.forEach(m=>m.color.set(w.top));
+  baseMats.forEach(m=>m.color.set(w.base));
+  document.querySelectorAll(".way").forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  kick();
+}));
+
+const ease = t => t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
+const v3 = new THREE.Vector3(), camDir = new THREE.Vector3();
+
+const SLEEVE_Y = FLOOR + WALL_H + 0.35;
+function applyState(){
+  const ex = S.explode;
+  doorPivot.rotation.y = -1.9*Math.max(S.door, ex*0.6);
+  doorPivot.position.set(P.x - ex*2.2, 0, P.z + ex*2.6);
+  tin.position.z = 3.2*S.tin + ex*3;
+  tin.position.y = FLOOR + 0.02 + ex*2.5;
+  lid.position.y = ex*4.5;
+  sleeve.position.y = SLEEVE_Y + ex*7;
+  can.position.y = 0.25 + S.can*7 + ex*10;
+  flapPivot.rotation.x = -1.95*S.flap;
+  marker.position.y = 6.0 + S.flap*1.3;
+  pocket.position.z = ex*3.2;
+  teesOut.position.z = ex*3;
+  teeSet.position.y = S.tees*2.2;
+  magnet.position.z = -ex*3.5;
+  shim.position.y = S.shim*4.5 + ex*1.5;
+  shim.rotation.x = S.shim*0.5;
+}
+
+function updatePins(){
+  const w = holder.clientWidth, h = holder.clientHeight;
+  camDir.subVectors(camera.position, controls.target).setY(0).normalize();
+  Object.keys(pinEls).forEach(id=>{
+    const a = anchors[id], el = pinEls[id];
+    a.obj.getWorldPosition(v3);
+    let away = S.explode>0.3;
+    if(a.dir){ const d = a.dir[0]*camDir.x + a.dir[2]*camDir.z; if(d < -0.1) away = true; }
+    v3.project(camera);
+    if(v3.z>1) away = true;
+    const x = (v3.x*0.5+0.5)*w, y = (-v3.y*0.5+0.5)*h;
+    el.style.transform = "translate("+x.toFixed(1)+"px,"+y.toFixed(1)+"px)";
+    el.classList.toggle("away", away);
+    el.tabIndex = away ? -1 : 0;
+  });
+}
+
+/* ---------- resize / loop ---------- */
+function resize(){
+  const w = holder.clientWidth, h = holder.clientHeight;
+  if(!w || !h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  kick();
+}
+new ResizeObserver(resize).observe(holder);
+
+let running = false, visible = true, onScreen = true, last = 0, idleFrames = 0;
+function kick(){ idleFrames = 0; if(!running && visible && onScreen){ running = true; last = performance.now(); requestAnimationFrame(frame); } }
+function frame(now){
+  if(!visible || !onScreen){ running = false; return; }
+  const dt = Math.min(0.05, (now-last)/1000); last = now;
+  const k = 1-Math.exp(-dt*5.5);
+  let moving = false;
+  Object.keys(S).forEach(key=>{ const d=T[key]-S[key]; if(Math.abs(d)>0.0005){ S[key]+=d*k; moving=true; } else S[key]=T[key]; });
+  applyState();
+  if(camAnim){
+    camAnim.t = Math.min(1, camAnim.t + dt/1.2);
+    const e = ease(camAnim.t);
+    camera.position.lerpVectors(camAnim.fromP, camAnim.toP, e);
+    controls.target.lerpVectors(camAnim.fromT, camAnim.toT, e);
+    moving = true;
+    if(camAnim.t>=1) camAnim = null;
+  }
+  if(!reduced && active==="overview" && !camAnim && now-lastUser > 6000) controls.autoRotate = true;
+  const ctrlMoved = controls.update();
+  renderer.render(scene, camera);
+  updatePins();
+  if(moving || ctrlMoved || controls.autoRotate) idleFrames = 0; else idleFrames++;
+  if(idleFrames > 30){ running = false; return; }
+  requestAnimationFrame(frame);
+}
+controls.addEventListener("change", kick);
+document.addEventListener("visibilitychange",()=>{ visible = !document.hidden; if(visible) kick(); });
+new IntersectionObserver(es=>{ onScreen = es[0].isIntersecting; if(onScreen) kick(); }).observe(holder);
+
+// first frame
+select("overview");
+if(!reduced){ camAnim=null; const fr=framing(FEATURES[0]); camera.position.copy(fr.pos); controls.target.copy(fr.tgt); }
+resize();
+applyState();
+renderer.render(scene, camera);
+note.hidden = true;
+kick();
+
+/* keyboard: arrow keys turn the model when the canvas has focus */
+canvas.addEventListener("keydown", e=>{
+  if(e.key!=="ArrowLeft" && e.key!=="ArrowRight") return;
+  e.preventDefault(); camAnim=null; lastUser=performance.now(); controls.autoRotate=false;
+  const off = camera.position.clone().sub(controls.target);
+  off.applyAxisAngle(new THREE.Vector3(0,1,0), e.key==="ArrowLeft"?0.2:-0.2);
+  camera.position.copy(controls.target).add(off); kick();
+});
+
+// Redraw text textures after web fonts load
+function redrawAll(){
+  [tinTop,label,snapTex].forEach(t=>{ if(t.userData && t.userData.draw){ const c=t.image; t.userData.draw(c.getContext("2d"),c.width,c.height); t.needsUpdate=true; } });
+  kick();
+}
+if(document.fonts && document.fonts.load){
+  Promise.race([
+    Promise.all([document.fonts.load("400 40px Gloock"), document.fonts.load("600 20px 'JetBrains Mono'")]),
+    new Promise(r=>setTimeout(r,3000))
+  ]).then(redrawAll, redrawAll);
+}
+})();
+</script>
+</body>
+</html>

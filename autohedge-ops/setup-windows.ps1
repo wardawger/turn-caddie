@@ -34,10 +34,16 @@ if (-not (Test-Path $EnvFile)) {
   }
   $lines = @(
     "SUPABASE_URL=https://paeredzsrygvrhblpobj.supabase.co",
-    "SUPABASE_SERVICE_KEY=$(Ask 'Supabase service_role key')",
-    "OPENAI_API_KEY=$(Ask 'OpenAI API key')",
-    "EXA_API_KEY=$(Ask 'Exa API key')"
+    "SUPABASE_SERVICE_KEY=$(Ask 'Supabase secret key')"
   )
+  $anthropic = Ask 'Anthropic API key (Enter to skip and use OpenAI)'
+  if ($anthropic) {
+    $lines += "ANTHROPIC_API_KEY=$anthropic"
+    $lines += "AUTOHEDGE_MODEL=anthropic/claude-haiku-5-5"
+  } else {
+    $lines += "OPENAI_API_KEY=$(Ask 'OpenAI API key')"
+  }
+  $lines += "EXA_API_KEY=$(Ask 'Exa API key')"
   Set-Content -Path $EnvFile -Value $lines -Encoding ascii
   icacls $EnvFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
 }

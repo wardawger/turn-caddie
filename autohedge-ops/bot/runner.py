@@ -121,8 +121,9 @@ NEWS_QUERIES = [
 def llm(system, user):
     import litellm
 
+    litellm.drop_params = True  # newer models reject some sampling params (e.g. temperature)
     resp = litellm.completion(
-        model=MODEL_OVERRIDE or "gpt-4.1-mini", max_tokens=1200, temperature=0.3,
+        model=MODEL_OVERRIDE or "gpt-4.1-mini", max_tokens=1200,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
     )
     return resp.choices[0].message.content

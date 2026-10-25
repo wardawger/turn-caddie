@@ -1,0 +1,13 @@
+[Unit]
+Description=AutoHedge runner
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/autohedge-ops/bot
+ExecStart=/opt/autohedge-ops/.venv/bin/python runner.py
+Restart=always
+RestartSec=10
+User=autohedge
+
+[Install]
+WantedBy=multi-user.target

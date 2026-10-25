@@ -62,7 +62,7 @@ try {
 } catch {
   Write-Host "Task Scheduler not available without admin; using the Startup folder instead."
   $startup = [Environment]::GetFolderPath("Startup")
-  $cmd = "@echo off`r`ncd /d `"$Ops\bot`"`r`n:loop`r`n`"$py`" runner.py`r`ntimeout /t 10 /nobreak >nul`r`ngoto loop`r`n"
+  $cmd = "@echo off`r`ncd /d `"$Ops\bot`"`r`n:loop`r`nstart `"`" /wait `"$py`" runner.py`r`ntimeout /t 10 /nobreak >nul`r`ngoto loop`r`n"
   Set-Content -Path "$Root\run-bot.cmd" -Value $cmd -Encoding ascii
   Set-Content -Path "$startup\AutoHedge.vbs" -Encoding ascii -Value "CreateObject(`"WScript.Shell`").Run `"cmd /c $Root\run-bot.cmd`", 0, False"
   Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" | Where-Object { $_.CommandLine -like "*runner.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }

@@ -28,24 +28,18 @@ if (-not (Test-Path "$Root\.venv")) { python -m venv "$Root\.venv" }
 Write-Host "[4/5] Configuring keys..."
 $EnvFile = "$Ops\bot\.env"
 if (-not (Test-Path $EnvFile)) {
-  function Ask($name) {
-    $s = Read-Host "$name" -AsSecureString
-    [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-  }
-  $lines = @(
+  # Hidden prompts mangle pasted keys on some consoles, so fill in a file instead.
+  $template = @(
     "SUPABASE_URL=https://paeredzsrygvrhblpobj.supabase.co",
-    "SUPABASE_SERVICE_KEY=$(Ask 'Supabase secret key')"
+    "SUPABASE_SERVICE_KEY=",
+    "ANTHROPIC_API_KEY=",
+    "AUTOHEDGE_MODEL=anthropic/claude-haiku-5-5",
+    "EXA_API_KEY="
   )
-  $anthropic = Ask 'Anthropic API key (Enter to skip and use OpenAI)'
-  if ($anthropic) {
-    $lines += "ANTHROPIC_API_KEY=$anthropic"
-    $lines += "AUTOHEDGE_MODEL=anthropic/claude-haiku-5-5"
-  } else {
-    $lines += "OPENAI_API_KEY=$(Ask 'OpenAI API key')"
-  }
-  $lines += "EXA_API_KEY=$(Ask 'Exa API key')"
-  Set-Content -Path $EnvFile -Value $lines -Encoding ascii
+  Set-Content -Path $EnvFile -Value $template -Encoding ascii
   icacls $EnvFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
+  Write-Host "Paste each key after the = sign (one line each), save, and close Notepad."
+  Start-Process notepad.exe -ArgumentList "`"$EnvFile`"" -Wait
 }
 
 Write-Host "[5/5] Registering auto-start..."

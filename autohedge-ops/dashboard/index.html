@@ -26,6 +26,12 @@
   pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:10px; border-radius:8px; max-height:420px; overflow:auto; font-size:13px; }
   tr.run { cursor:pointer; }
   .hidden { display:none; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:12px; }
+  .stat b { display:block; font-size:20px; } .stat span { color:var(--muted); font-size:12px; }
+  svg.chart { width:100%; height:180px; display:block; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:6px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; }
+  .check { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; } .check input { width:auto; }
 </style>
 </head>
 <body>
@@ -46,7 +52,22 @@
         <span style="flex:1"></span>
         <button id="signout">Sign out</button>
       </div>
-      <p class="muted" id="advisory">Advisory mode: agents write trade recommendations only. No orders are placed.</p>
+      <p class="muted" id="advisory">Paper trading only: simulated money, no real orders or wallet access.</p>
+    </section>
+
+    <section class="card">
+      <strong>Paper portfolio</strong> <span class="muted">(simulated $50, no real money)</span>
+      <div class="stats" style="margin-top:10px">
+        <div class="stat"><b id="sEquity">–</b><span>Equity</span></div>
+        <div class="stat"><b id="sPnl">–</b><span>P&amp;L vs start</span></div>
+        <div class="stat"><b id="sCash">–</b><span>Cash</span></div>
+        <div class="stat"><b id="sBtc">–</b><span>$50 held in BTC</span></div>
+        <div class="stat"><b id="sSpy">–</b><span>$50 held in SPY</span></div>
+      </div>
+      <svg id="chart" class="chart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Bot</span><span><i style="background:var(--warn)"></i>BTC hold</span><span><i style="background:var(--muted)"></i>SPY hold</span><span id="chartNote"></span></div>
+      <table style="margin-top:12px"><thead><tr><th>Position</th><th>Qty</th><th>Avg cost</th><th>Value</th></tr></thead><tbody id="positions"></tbody></table>
+      <table style="margin-top:12px"><thead><tr><th>Trade</th><th>Side</th><th>USD</th><th>Why</th></tr></thead><tbody id="trades"></tbody></table>
     </section>
 
     <section class="card">
@@ -61,7 +82,10 @@
         <div style="flex:1"><label for="interval">Interval (minutes, min 15)</label><input id="interval" type="number" min="15"></div>
         <div style="flex:1"><label for="maxRuns">Max runs per day</label><input id="maxRuns" type="number" min="1" max="100"></div>
       </div>
-      <p><button id="save">Save settings</button></p>
+      <label for="watchlist">Watchlist (Yahoo Finance symbols, comma-separated, max 12)</label>
+      <input id="watchlist">
+      <label class="check"><input id="deep" type="checkbox"> Daily deep research (full AutoHedge agent pipeline; costs more)</label>
+      <p><button id="save">Save settings</button> <button id="reset">Reset paper account</button></p>
     </section>
 
     <section class="card">
@@ -102,7 +126,7 @@
     $("botDetail").textContent = hb ? `last seen ${new Date(hb.last_seen).toLocaleString()} · ${hb.host || ""}` : "never seen";
     $("toggle").textContent = cfg.paused ? "Resume schedule" : "Pause schedule";
     if (document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "INPUT") {
-      $("task").value = cfg.task; $("interval").value = cfg.interval_minutes; $("maxRuns").value = cfg.max_runs_per_day;
+      $("task").value = cfg.task; $("interval").value = cfg.interval_minutes; $("maxRuns").value = cfg.max_runs_per_day; $("watchlist").value = (cfg.watchlist || []).join(", "); $("deep").checked = !!cfg.deep_research;
     }
     const tb = $("runs"); tb.textContent = "";
     for (const run of runs) {
@@ -116,12 +140,62 @@
     }
   }
 
+  const usd = n => "$" + Number(n).toFixed(2);
+
+  function drawChart(points, start, bench) {
+    const svg = $("chart"); svg.textContent = "";
+    if (points.length < 2) { $("chartNote").textContent = "chart appears after 2+ snapshots"; return; }
+    $("chartNote").textContent = "";
+    const series = [
+      { color: "var(--accent)", v: points.map(p => +p.equity) },
+      ...[["BTC-USD", "var(--warn)"], ["SPY", "var(--muted)"]].map(([sym, color]) => ({
+        color, v: bench && bench[sym] ? points.map(p => p.prices && p.prices[sym] ? start * p.prices[sym] / bench[sym] : null) : [] })),
+    ];
+    const all = series.flatMap(x => x.v).filter(v => v != null);
+    const lo = Math.min(...all, start) * 0.995, hi = Math.max(...all, start) * 1.005, n = points.length - 1;
+    const X = i => (i / n) * 600, Y = v => 175 - ((v - lo) / (hi - lo || 1)) * 170;
+    const mk = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+    svg.appendChild(mk("line", { x1: 0, x2: 600, y1: Y(start), y2: Y(start), stroke: "var(--line)", "stroke-dasharray": "4 4" }));
+    for (const s of series) {
+      const d = s.v.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean);
+      if (d.length > 1) svg.appendChild(mk("polyline", { points: d.join(" "), fill: "none", stroke: s.color, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }));
+    }
+  }
+
+  function fillRows(tbodyId, rows) {
+    const tb = $(tbodyId); tb.textContent = "";
+    for (const cells of rows) { const tr = document.createElement("tr"); for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); } tb.appendChild(tr); }
+  }
+
+  async function refreshPortfolio() {
+    const [a, pos, tr, eq] = await Promise.all([
+      sb.from("paper_account").select("*").eq("id", 1).single(),
+      sb.from("paper_positions").select("*"),
+      sb.from("paper_trades").select("ts,symbol,side,usd,reason").order("id", { ascending: false }).limit(12),
+      sb.from("paper_equity").select("ts,equity,cash,prices").order("id", { ascending: false }).limit(500),
+    ]);
+    if (a.error) return;
+    const acct = a.data, start = +acct.starting_cash, pts = (eq.data || []).reverse(), last = pts[pts.length - 1];
+    const equity = last ? +last.equity : start;
+    $("sEquity").textContent = usd(equity);
+    $("sPnl").textContent = `${equity >= start ? "+" : ""}${usd(equity - start)} (${((equity / start - 1) * 100).toFixed(1)}%)`;
+    $("sPnl").className = equity >= start ? "ok" : "bad";
+    $("sCash").textContent = usd(acct.cash);
+    const b = acct.benchmark_start;
+    for (const [id, sym] of [["sBtc", "BTC-USD"], ["sSpy", "SPY"]]) {
+      $(id).textContent = b && b[sym] && last && last.prices && last.prices[sym] ? usd(start * last.prices[sym] / b[sym]) : "–";
+    }
+    drawChart(pts, start, b);
+    fillRows("positions", (pos.data || []).map(p => [p.symbol, (+p.qty).toPrecision(5), (+p.avg_cost).toPrecision(5), usd(p.qty * p.avg_cost) + " at cost"]));
+    fillRows("trades", (tr.data || []).map(t => [`${new Date(t.ts).toLocaleString()} ${t.symbol}`, t.side, usd(t.usd), t.reason || ""]));
+  }
+
   async function show() {
     const { data } = await sb.auth.getSession();
     const on = !!data.session;
     $("login").classList.toggle("hidden", on); $("app").classList.toggle("hidden", !on);
     clearInterval(timer);
-    if (on) { refresh(); timer = setInterval(refresh, 15000); }
+    if (on) { refresh(); refreshPortfolio(); timer = setInterval(() => { refresh(); refreshPortfolio(); }, 15000); }
   }
 
   $("signin").onclick = async () => {
@@ -139,9 +213,15 @@
   };
   $("save").onclick = async () => {
     const { error } = await sb.from("bot_config").update({
-      task: $("task").value, interval_minutes: +$("interval").value, max_runs_per_day: +$("maxRuns").value, updated_at: new Date().toISOString(),
+      task: $("task").value, interval_minutes: +$("interval").value, max_runs_per_day: +$("maxRuns").value,
+      watchlist: $("watchlist").value.split(",").map(x => x.trim().toUpperCase()).filter(Boolean).slice(0, 12), deep_research: $("deep").checked, updated_at: new Date().toISOString(),
     }).eq("id", 1);
     msg($("actionMsg"), error ? error.message : "Saved", error ? "bad" : "muted"); refresh();
+  };
+  $("reset").onclick = async () => {
+    if (!confirm("Reset the paper account to $50? This deletes all paper trades and the equity history.")) return;
+    const { error } = await sb.from("bot_commands").insert({ command: "reset_paper" });
+    msg($("actionMsg"), error ? error.message : "Reset queued; applies within ~30s", error ? "bad" : "muted");
   };
   show();
 </script>

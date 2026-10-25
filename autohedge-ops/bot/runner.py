@@ -1,7 +1,7 @@
-"""AutoHedge runner: polls Supabase for config/commands, runs cycles, reports status.
+"""AutoHedge runner: polls Supabase for config/commands, runs paper-trading cycles, reports status.
 
-Advisory only: AutoHedge 0.1.5 agents emit text recommendations and have no
-trade-execution tool attached. Do not add wallet keys to this environment.
+Paper trading only: simulated $50 account, no exchange or wallet access. Do not add wallet keys
+to this environment.
 """
 import json
 import os
@@ -96,49 +96,123 @@ def config():
 
 def runs_today():
     start = now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    res = db.table("bot_runs").select("id", count="exact").gte("started_at", start).execute()
+    res = db.table("bot_runs").select("id", count="exact").gte("started_at", start).neq("trigger", "deep").execute()
     return res.count or 0
 
 
-def last_run_start():
-    rows = db.table("bot_runs").select("started_at").order("started_at", desc=True).limit(1).execute().data
+def last_run_start(trigger_filter=None):
+    q = db.table("bot_runs").select("started_at").order("started_at", desc=True).limit(1)
+    q = q.eq("trigger", "deep") if trigger_filter == "deep" else q.neq("trigger", "deep")
+    rows = q.execute().data
     return datetime.fromisoformat(rows[0]["started_at"]) if rows else None
 
 
-def run_cycle(task, trigger):
-    run = db.table("bot_runs").insert({"task": task, "trigger": trigger}).execute().data[0]
-    heartbeat("running", f"run {run['id']}")
+def finish(run_id, **fields):
+    db.table("bot_runs").update({"finished_at": now().isoformat(), **fields}).eq("id", run_id).execute()
+
+
+NEWS_QUERIES = [
+    "US stock market and economy news today",
+    "crypto market news Bitcoin Ethereum Solana today",
+    "oil gold commodities market news today",
+]
+
+
+def llm(system, user):
+    import litellm
+
+    resp = litellm.completion(
+        model=MODEL_OVERRIDE or "gpt-4.1-mini", max_tokens=1200, temperature=0.3,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+    )
+    return resp.choices[0].message.content
+
+
+def run_deep(task):
+    """Optional: the full AutoHedge agent pipeline (several model calls, so at most once a day)."""
+    run = db.table("bot_runs").insert({"task": task, "trigger": "deep"}).execute().data[0]
+    heartbeat("running", f"deep research {run['id']}")
     try:
         patch_agents()  # must run before autohedge builds its agents
         from autohedge import AutoHedge  # imported lazily so the heartbeat works without LLM keys
 
-        output = AutoHedge(name="autohedge", output_type="dict").run(task=task)
-        raw = json.loads(json.dumps(output, default=str))
+        raw = json.loads(json.dumps(AutoHedge(name="autohedge", output_type="dict").run(task=task), default=str))
         try:
             thesis = synthesize(task, raw)
         except Exception as e:
             thesis = f"(thesis step failed: {str(e)[:200]})"
-        payload = {"thesis": thesis, "raw": raw}
-        db.table("bot_runs").update(
-            {"status": "ok", "finished_at": now().isoformat(), "output": payload}
-        ).eq("id", run["id"]).execute()
+        finish(run["id"], status="ok", output={"thesis": thesis, "raw": raw})
+        return thesis
+    except Exception as e:
+        finish(run["id"], status="error", error=str(e)[:2000])
+        return ""
+
+
+def latest_deep_thesis():
+    rows = db.table("bot_runs").select("started_at,output").eq("trigger", "deep").eq("status", "ok") \
+        .order("started_at", desc=True).limit(1).execute().data
+    if rows and now() - datetime.fromisoformat(rows[0]["started_at"]) < timedelta(hours=36):
+        return (rows[0]["output"] or {}).get("thesis", "")
+    return ""
+
+
+def run_paper(cfg, trigger):
+    """One lean decision cycle: prices (free) + one news search + one model call."""
+    import paper
+    from market_tools import fetch_news
+
+    if cfg.get("deep_research"):
+        last = last_run_start("deep")
+        if last is None or now() - last >= timedelta(hours=24):
+            run_deep(cfg["task"])
+    run = db.table("bot_runs").insert({"task": "paper trading decision", "trigger": trigger}).execute().data[0]
+    heartbeat("running", f"run {run['id']}")
+    try:
+        store = paper.Store(db)
+        watchlist = paper.clean_watchlist(cfg.get("watchlist"))
+        quotes = paper.fetch_quotes(sorted(set(watchlist) | set(paper.BENCHMARKS) | set(store.positions())), now())
+        news = ""
+        try:
+            query = NEWS_QUERIES[run["id"] % len(NEWS_QUERIES)]
+            news = "\n".join(f"- {a['title']} ({(a['publishedDate'] or '')[:10]}): {(a['text'] or '')[:450]}"
+                             for a in fetch_news(query, n=5, chars=500, days=3))
+        except Exception as e:  # news is optional; the cycle still works on prices
+            news = f"(news unavailable: {str(e)[:100]})"
+        out = paper.paper_cycle(store, watchlist, quotes, llm, news=news, deep_thesis=latest_deep_thesis(), run_id=run["id"])
+        out["raw"] = json.loads(json.dumps(out["raw"], default=str))
+        finish(run["id"], status="ok", output=out)
     except Exception as e:  # keep the loop alive; surface the error on the dashboard
-        db.table("bot_runs").update(
-            {"status": "error", "finished_at": now().isoformat(), "error": str(e)[:2000]}
-        ).eq("id", run["id"]).execute()
+        finish(run["id"], status="error", error=str(e)[:2000])
+
+
+def mark_only():
+    """Cheap hourly valuation (no model call): applies the automatic stop-loss and records equity."""
+    import paper
+
+    store = paper.Store(db)
+    quotes = paper.fetch_quotes(sorted(set(paper.BENCHMARKS) | set(store.positions())), now())
+    if quotes:
+        paper.mark_to_market(store, quotes)
 
 
 def main():
+    import paper
+
     heartbeat("starting")
+    last_mark = paper.Store(db).last_equity_ts() or now()
     while True:
         try:
             cfg = config()
             cmds = db.table("bot_commands").select("*").is_("handled_at", "null").order("id").execute().data
             for cmd in cmds:
-                run_cycle(cfg["task"], "manual")
-                db.table("bot_commands").update(
-                    {"handled_at": now().isoformat(), "result": "ran"}
-                ).eq("id", cmd["id"]).execute()
+                if cmd["command"] == "reset_paper":
+                    paper.Store(db).reset()
+                    result = "reset"
+                else:
+                    run_paper(cfg, "manual")
+                    result = "ran"
+                    last_mark = now()
+                db.table("bot_commands").update({"handled_at": now().isoformat(), "result": result}).eq("id", cmd["id"]).execute()
             if cmds:
                 continue
             if cfg["paused"]:
@@ -147,7 +221,12 @@ def main():
                 last = last_run_start()
                 due = last is None or now() - last >= timedelta(minutes=cfg["interval_minutes"])
                 if due and runs_today() < cfg["max_runs_per_day"]:
-                    run_cycle(cfg["task"], "schedule")
+                    run_paper(cfg, "schedule")
+                    last_mark = now()
+                elif now() - last_mark >= timedelta(minutes=60):
+                    heartbeat("marking")
+                    mark_only()
+                    last_mark = now()
                 else:
                     heartbeat("idle")
         except Exception as e:

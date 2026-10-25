@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 $Branch = "claude/amazing-mendel-mcxtn5"
 $Root = Join-Path $env:USERPROFILE "autohedge"
 
+Write-Host "[1/5] Checking Python and Git..."
 foreach ($pkg in @(@{cmd="python"; id="Python.Python.3.12"}, @{cmd="git"; id="Git.Git"})) {
   if (-not (Get-Command $pkg.cmd -ErrorAction SilentlyContinue)) {
     winget install -e --id $pkg.id --accept-package-agreements --accept-source-agreements
@@ -12,6 +13,7 @@ foreach ($pkg in @(@{cmd="python"; id="Python.Python.3.12"}, @{cmd="git"; id="Gi
   }
 }
 
+Write-Host "[2/5] Fetching code..."
 if (Test-Path "$Root\repo\.git") {
   git -C "$Root\repo" fetch -q origin $Branch; git -C "$Root\repo" reset -q --hard "origin/$Branch"
 } else {
@@ -19,9 +21,11 @@ if (Test-Path "$Root\repo\.git") {
   git clone -q -b $Branch https://github.com/wardawger/turn-caddie "$Root\repo"
 }
 $Ops = "$Root\repo\autohedge-ops"
+Write-Host "[3/5] Installing packages (a few minutes)..."
 if (-not (Test-Path "$Root\.venv")) { python -m venv "$Root\.venv" }
 & "$Root\.venv\Scripts\pip" install -q -r "$Ops\requirements.txt"
 
+Write-Host "[4/5] Configuring keys..."
 $EnvFile = "$Ops\bot\.env"
 if (-not (Test-Path $EnvFile)) {
   function Ask($name) {
@@ -38,6 +42,7 @@ if (-not (Test-Path $EnvFile)) {
   icacls $EnvFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
 }
 
+Write-Host "[5/5] Registering auto-start..."
 # Start at logon, restart on failure, keep running on battery.
 $action   = New-ScheduledTaskAction -Execute "$Root\.venv\Scripts\python.exe" -Argument "`"$Ops\bot\runner.py`"" -WorkingDirectory "$Ops\bot"
 $trigger  = New-ScheduledTaskTrigger -AtLogOn

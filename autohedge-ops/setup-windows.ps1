@@ -49,13 +49,25 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 Write-Host "[5/5] Registering auto-start..."
-# Start at logon, restart on failure, keep running on battery.
-$action   = New-ScheduledTaskAction -Execute "$Root\.venv\Scripts\python.exe" -Argument "`"$Ops\bot\runner.py`"" -WorkingDirectory "$Ops\bot"
-$trigger  = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
-Register-ScheduledTask -TaskName "AutoHedge Runner" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Stop-ScheduledTask -TaskName "AutoHedge Runner" -ErrorAction SilentlyContinue
-Start-ScheduledTask -TaskName "AutoHedge Runner"
+# Start at logon. Task Scheduler needs a per-user trigger when not admin; fall back to the Startup folder.
+$py  = "$Root\.venv\Scripts\pythonw.exe"
+$arg = "`"$Ops\bot\runner.py`""
+try {
+  $action   = New-ScheduledTaskAction -Execute $py -Argument $arg -WorkingDirectory "$Ops\bot"
+  $trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName "AutoHedge Runner" -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+  Stop-ScheduledTask -TaskName "AutoHedge Runner" -ErrorAction SilentlyContinue
+  Start-ScheduledTask -TaskName "AutoHedge Runner"
+} catch {
+  Write-Host "Task Scheduler not available without admin; using the Startup folder instead."
+  $startup = [Environment]::GetFolderPath("Startup")
+  $cmd = "@echo off`r`ncd /d `"$Ops\bot`"`r`n:loop`r`n`"$py`" runner.py`r`ntimeout /t 10 /nobreak >nul`r`ngoto loop`r`n"
+  Set-Content -Path "$Root\run-bot.cmd" -Value $cmd -Encoding ascii
+  Set-Content -Path "$startup\AutoHedge.vbs" -Encoding ascii -Value "CreateObject(`"WScript.Shell`").Run `"cmd /c $Root\run-bot.cmd`", 0, False"
+  Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'" | Where-Object { $_.CommandLine -like "*runner.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+  Start-Process wscript.exe -ArgumentList "`"$startup\AutoHedge.vbs`""
+}
 
-powercfg /change standby-timeout-ac 0
+try { powercfg /change standby-timeout-ac 0 } catch {}
 Write-Host "Done. Check the dashboard: it should show ACTIVE within a minute. Plug in the laptop and keep it logged in."

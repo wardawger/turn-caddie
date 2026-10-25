@@ -83,6 +83,29 @@ def test_engine():
     assert stops and not st.positions()                                    # -10% auto stop-loss
 
 
+def test_exit_plans():
+    quotes = {"BTC-USD": quote(100.0), "SPY": quote(500.0), "ETH-USD": quote(10.0)}
+    wl = list(quotes)
+    st = paper.MemoryStore(50.0)
+    ex, _ = paper.apply_orders(st, quotes, [
+        {"symbol": "BTC-USD", "action": "buy", "usd": 10, "stop_pct": 5, "target_pct": 10, "reason": "a"},
+        {"symbol": "ETH-USD", "action": "buy", "usd": 10, "stop_pct": 50, "reason": "b"},   # stop clamped to <=10%
+    ], wl)
+    pos = st.positions()
+    assert abs(pos["BTC-USD"]["stop_price"] / 100.1 - 0.95) < 1e-6 and abs(pos["BTC-USD"]["target_price"] / 100.1 - 1.10) < 1e-6
+    assert abs(pos["ETH-USD"]["stop_price"] / 10.01 - 0.90) < 1e-6
+    # target hit -> sells BTC only, keeps ETH; stop-hit -> sells ETH
+    _, exits = paper.mark_to_market(st, dict(quotes, **{"BTC-USD": quote(111.0)}))
+    assert [e["symbol"] for e in exits] == ["BTC-USD"] and "target" in exits[0]["reason"] and "ETH-USD" in st.positions()
+    _, exits = paper.mark_to_market(st, dict(quotes, **{"ETH-USD": quote(8.9)}))
+    assert [e["symbol"] for e in exits] == ["ETH-USD"] and "stop" in exits[0]["reason"] and not st.positions()
+    # partial sell keeps the exit plan on the remainder
+    st = paper.MemoryStore(50.0)
+    paper.apply_orders(st, quotes, [{"symbol": "BTC-USD", "action": "buy", "usd": 20, "stop_pct": 5, "target_pct": 10, "reason": "a"}], wl)
+    paper.apply_orders(st, quotes, [{"symbol": "BTC-USD", "action": "sell", "pct": 50, "reason": "trim"}], wl)
+    assert st.positions()["BTC-USD"]["stop_price"] and st.positions()["BTC-USD"]["target_price"]
+
+
 def test_runner_flow():
     fake = FakeDB()
     fake.tables["bot_config"] = [{"id": 1, "paused": False, "task": "t", "watchlist": ["BTC-USD", "ETH-USD", "BAD SYMBOL!"], "deep_research": False}]
@@ -104,4 +127,4 @@ def test_runner_flow():
 
 
 if __name__ == "__main__":
-    test_engine(); test_runner_flow(); print("all tests passed")
+    test_engine(); test_exit_plans(); test_runner_flow(); print("all tests passed")

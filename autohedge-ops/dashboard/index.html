@@ -66,7 +66,7 @@
       </div>
       <svg id="chart" class="chart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
       <div class="legend"><span><i style="background:var(--accent)"></i>Bot</span><span><i style="background:var(--warn)"></i>BTC hold</span><span><i style="background:var(--muted)"></i>SPY hold</span><span id="chartNote"></span></div>
-      <table style="margin-top:12px"><thead><tr><th>Position</th><th>Qty</th><th>Avg cost</th><th>Value</th></tr></thead><tbody id="positions"></tbody></table>
+      <table style="margin-top:12px"><thead><tr><th>Position</th><th>Value now</th><th>P&amp;L</th><th>Stop / target</th></tr></thead><tbody id="positions"></tbody></table>
       <table style="margin-top:12px"><thead><tr><th>Trade</th><th>Side</th><th>USD</th><th>Why</th></tr></thead><tbody id="trades"></tbody></table>
     </section>
 
@@ -186,7 +186,12 @@
       $(id).textContent = b && b[sym] && last && last.prices && last.prices[sym] ? usd(start * last.prices[sym] / b[sym]) : "–";
     }
     drawChart(pts, start, b);
-    fillRows("positions", (pos.data || []).map(p => [p.symbol, (+p.qty).toPrecision(5), (+p.avg_cost).toPrecision(5), usd(p.qty * p.avg_cost) + " at cost"]));
+    const px = (last && last.prices) || {};
+    fillRows("positions", (pos.data || []).map(p => {
+      const now = px[p.symbol], pnl = now ? (now / p.avg_cost - 1) * 100 : null;
+      return [p.symbol, now ? usd(p.qty * now) : usd(p.qty * p.avg_cost) + " (cost)", pnl == null ? "–" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%`,
+        `${p.stop_price ? (+p.stop_price).toPrecision(5) : "–"} / ${p.target_price ? (+p.target_price).toPrecision(5) : "–"}`];
+    }));
     fillRows("trades", (tr.data || []).map(t => [`${new Date(t.ts).toLocaleString()} ${t.symbol}`, t.side, usd(t.usd), t.reason || ""]));
   }
 

@@ -6,12 +6,13 @@
 <meta name="robots" content="noindex">
 <title>AutoHedge Console</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1a1d21; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --accent:#1d4ed8; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0f1115; --card:#181b21; --text:#e8eaed; --muted:#9aa0a6; --line:#2a2e36; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --accent:#6ea8fe; } }
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1a1d21; --muted:#6b7280; --line:#e5e7eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --accent:#1d4ed8; --shade:rgba(0,0,0,.45); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0f1115; --card:#181b21; --text:#e8eaed; --muted:#9aa0a6; --line:#2a2e36; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --accent:#6ea8fe; --shade:rgba(0,0,0,.65); } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,sans-serif; }
   main { max-width:900px; margin:0 auto; padding:16px; }
   h1 { font-size:20px; margin:8px 0 16px; }
+  h3 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 6px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
   .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
   .badge { padding:2px 10px; border-radius:99px; font-size:13px; font-weight:600; border:1px solid currentColor; }
@@ -19,31 +20,49 @@
   .muted { color:var(--muted); font-size:13px; }
   button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; }
   button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.small { padding:3px 10px; font-size:12px; } button.small.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.6; cursor:default; }
   input, textarea { font:inherit; width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
   label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
   table { width:100%; border-collapse:collapse; }
   th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); font-size:14px; vertical-align:top; }
-  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:10px; border-radius:8px; max-height:420px; overflow:auto; font-size:13px; }
-  tr.run { cursor:pointer; }
-  .hidden { display:none; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:color-mix(in srgb, var(--accent) 6%, transparent); }
+  tr.sub td { padding-top:0; color:var(--muted); font-size:13px; }
+  tr.group td { border-bottom:none; }
+  .hidden { display:none !important; }
   .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:12px; }
   .stat b { display:block; font-size:20px; } .stat span { color:var(--muted); font-size:12px; }
-  svg.chart { width:100%; height:180px; display:block; }
-  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:6px; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:6px; align-items:center; }
   .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; }
+  .check { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; } .check input { width:auto; }
+  #chartWrap { position:relative; min-height:220px; border-radius:8px; }
+  #chart { display:block; width:100%; touch-action:pan-y; cursor:crosshair; }
+  #tip { position:absolute; top:6px; pointer-events:none; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:12px; line-height:1.5; box-shadow:0 4px 14px rgba(0,0,0,.18); white-space:nowrap; z-index:2; }
+  #tip b { font-size:13px; }
+  .mk { cursor:pointer; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes shimmer { to { background-position: -200% 0; } }
   @keyframes bar { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
   .spinner { width:11px; height:11px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; display:inline-block; animation:spin .8s linear infinite; }
   .pill { white-space:nowrap; display:inline-flex; gap:6px; align-items:center; padding:1px 10px; border-radius:99px; font-size:12px; font-weight:600; background:color-mix(in srgb, currentColor 14%, transparent); }
-  .pill.ok { color:var(--ok); } .pill.err { color:var(--bad); } .pill.run { color:var(--accent); } .pill.queued { color:var(--warn); }
+  .pill.ok { color:var(--ok); } .pill.err { color:var(--bad); } .pill.run { color:var(--accent); } .pill.queued { color:var(--warn); } .pill.gray { color:var(--muted); }
   .skeleton { color:transparent !important; border-radius:6px; user-select:none; background:linear-gradient(90deg,var(--line) 25%,var(--bg) 50%,var(--line) 75%); background-size:200% 100%; animation:shimmer 1.2s linear infinite; }
-  #topbar { position:fixed; top:0; left:0; right:0; height:2px; overflow:hidden; opacity:0; transition:opacity .2s; z-index:10; }
+  #topbar { position:fixed; top:0; left:0; right:0; height:2px; overflow:hidden; opacity:0; transition:opacity .2s; z-index:30; }
   #topbar.on { opacity:1; } #topbar i { display:block; height:100%; width:40%; background:var(--accent); animation:bar 1s ease-in-out infinite; }
   tr.pending td { background:color-mix(in srgb, var(--warn) 8%, transparent); }
-  button:disabled { opacity:.6; cursor:default; }
   @media (prefers-reduced-motion: reduce) { .spinner, .skeleton, #topbar i { animation:none; } }
-  .check { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; } .check input { width:auto; }
+  #drawer { position:fixed; inset:0; background:var(--shade); overflow:auto; z-index:20; padding:16px; }
+  .sheet { max-width:720px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; position:relative; }
+  #drawerClose { position:absolute; top:10px; right:10px; padding:4px 10px; }
+  .sheet h2 { font-size:17px; margin:0 40px 4px 0; }
+  .block { white-space:pre-wrap; word-break:break-word; margin:0 0 4px; }
+  .tcard { border:1px solid var(--line); border-radius:10px; padding:12px; margin:8px 0; }
+  .tcard.focus { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .tcard .head { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px 12px; margin-bottom:8px; }
+  .metrics div { font-size:13px; } .metrics span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  .why { white-space:pre-wrap; word-break:break-word; font-size:14px; }
+  details pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:10px; border-radius:8px; max-height:340px; overflow:auto; font-size:12px; }
 </style>
 </head>
 <body>
@@ -65,7 +84,7 @@
         <span style="flex:1"></span>
         <button id="signout">Sign out</button>
       </div>
-      <p class="muted" id="advisory">Paper trading only: simulated money, no real orders or wallet access.</p>
+      <p class="muted">Paper trading only: simulated money, no real orders or wallet access.</p>
     </section>
 
     <section class="card">
@@ -77,10 +96,17 @@
         <div class="stat"><b id="sBtc">–</b><span>$50 held in BTC</span></div>
         <div class="stat"><b id="sSpy">–</b><span>$50 held in SPY</span></div>
       </div>
-      <svg id="chart" class="chart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Bot</span><span><i style="background:var(--warn)"></i>BTC hold</span><span><i style="background:var(--muted)"></i>SPY hold</span><span id="chartNote"></span></div>
-      <table style="margin-top:12px"><thead><tr><th>Position</th><th>Value now</th><th>P&amp;L</th><th>Stop / target</th></tr></thead><tbody id="positions"></tbody></table>
-      <table style="margin-top:12px"><thead><tr><th>Trade</th><th>Side</th><th>USD</th><th>Why</th></tr></thead><tbody id="trades"></tbody></table>
+      <div class="row" style="margin-bottom:6px">
+        <span class="muted">Range</span>
+        <button class="small on" data-range="0">All</button><button class="small" data-range="24">24h</button><button class="small" data-range="6">6h</button>
+        <span class="muted" id="chartNote"></span>
+      </div>
+      <div id="chartWrap"><svg id="chart" height="220"></svg><div id="tip" class="hidden"></div></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Bot</span><span><i style="background:var(--warn)"></i>BTC hold</span><span><i style="background:var(--muted)"></i>SPY hold</span><span style="color:var(--ok)">▲ buy</span><span style="color:var(--bad)">▼ sell</span><span>hover or touch for details, click a marker for the trade</span></div>
+      <h3>Open positions</h3>
+      <table><thead><tr><th>Position</th><th>Value now</th><th>P&amp;L</th><th>Stop / target</th></tr></thead><tbody id="positions"></tbody></table>
+      <h3>Recent trades <span class="muted" style="text-transform:none">(click for the full justification)</span></h3>
+      <table><thead><tr><th>When</th><th>Trade</th><th>USD</th><th>P&amp;L / reason</th></tr></thead><tbody id="trades"></tbody></table>
     </section>
 
     <section class="card">
@@ -89,7 +115,7 @@
         <button id="runNow">Run now</button>
         <span id="actionMsg" class="muted"></span>
       </div>
-      <label for="task">Task prompt</label>
+      <label for="task">Task prompt (used by daily deep research)</label>
       <textarea id="task" rows="3"></textarea>
       <div class="row">
         <div style="flex:1"><label for="interval">Interval (minutes, min 15)</label><input id="interval" type="number" min="15"></div>
@@ -102,12 +128,13 @@
     </section>
 
     <section class="card">
-      <strong>Recent runs</strong> <span class="muted">(click a row for output)</span>
+      <strong>Recent runs</strong> <span class="muted">(click a run for the full breakdown)</span>
       <table><thead><tr><th>Started</th><th>Trigger</th><th>Status</th><th>Duration</th></tr></thead><tbody id="runs"></tbody></table>
-      <pre id="detail" class="hidden"></pre>
     </section>
   </div>
 </main>
+
+<div id="drawer" class="hidden"><div class="sheet"><button id="drawerClose" aria-label="Close">✕</button><div id="drawerBody"></div></div></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
@@ -116,45 +143,57 @@
   const SUPABASE_KEY = "sb_publishable_dyaQ_7uUhFnNGieyYTz2Dw_Ra0bNbfr";
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   const $ = id => document.getElementById(id);
-  const STALE_MS = 10 * 60 * 1000;
+  const STALE_MS = 10 * 60 * 1000, PENDING_TIMEOUT_MS = 5 * 60 * 1000;
   let cfg = null, runs = [], timer = null, pending = null, loaded = false, inflight = 0;
-  const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
+  let acct = null, eqPoints = [], tradeList = [], rangeHours = 0;
 
+  const usd = n => (n == null ? "–" : (n < 0 ? "-$" : "$") + Math.abs(Number(n)).toFixed(2));
+  const sgn = (n, d = 2) => (n >= 0 ? "+" : "-") + Math.abs(n).toFixed(d);
+  const px = n => (n == null ? "–" : (+n).toLocaleString(undefined, { maximumSignificantDigits: 6 }));
+  const when = t => new Date(t).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const SVGNS = "http://www.w3.org/2000/svg";
+
+  function el(tag, cls, text, parent) {
+    const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e;
+  }
+  function svgEl(tag, attrs, style) {
+    const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (style) Object.assign(e.style, style); return e;
+  }
+  function msg(node, text, cls) { node.textContent = text; node.className = cls || "muted"; }
+  function pill(label, cls, spin) {
+    const p = el("span", "pill " + cls); if (spin) el("span", "spinner", null, p); p.append(label); return p;
+  }
+  function setBadge(text, cls, spin) {
+    const b = $("botState"); b.className = "badge " + cls; b.textContent = "";
+    if (spin) { el("span", "spinner", null, b); b.append(" "); } b.append(text);
+  }
+  function setSkeleton(on) {
+    for (const id of ["sEquity", "sPnl", "sCash", "sBtc", "sSpy"]) { const n = $(id); n.classList.toggle("skeleton", on); if (on) n.textContent = "$00.00"; }
+    $("chartWrap").classList.toggle("skeleton", on);
+  }
   async function tracked(fn) {
     inflight++; $("topbar").classList.add("on");
     try { return await fn(); } finally { if (--inflight === 0) $("topbar").classList.remove("on"); }
   }
-
-  function setBadge(text, cls, spin) {
-    const b = $("botState"); b.className = "badge " + cls; b.textContent = "";
-    if (spin) { const sp = document.createElement("span"); sp.className = "spinner"; b.appendChild(sp); b.append(" "); }
-    b.append(text);
-  }
-
-  function pill(label, cls, spin) {
-    const p = document.createElement("span"); p.className = "pill " + cls;
-    if (spin) { const sp = document.createElement("span"); sp.className = "spinner"; p.appendChild(sp); }
-    p.append(label); return p;
-  }
-
-  function setSkeleton(on) {
-    for (const id of ["sEquity", "sPnl", "sCash", "sBtc", "sSpy"]) {
-      const el = $(id); el.classList.toggle("skeleton", on); if (on) el.textContent = "$00.00";
+  function fillRows(tbodyId, rows) {
+    const tb = $(tbodyId); tb.textContent = "";
+    for (const r of rows) {
+      const tr = el("tr", r.cls || ""); if (r.onclick) tr.onclick = r.onclick;
+      for (const c of r.cells) { const td = el("td"); if (c instanceof Node) td.appendChild(c); else td.textContent = c; if (r.span) td.colSpan = r.span; tr.appendChild(td); }
+      tb.appendChild(tr);
     }
   }
 
-  function msg(el, text, cls) { el.textContent = text; el.className = cls || "muted"; }
-
+  /* ------------------------------------------------------------ status + runs */
   async function refresh() {
     const [c, h, r] = await Promise.all([
       sb.from("bot_config").select("*").eq("id", 1).single(),
       sb.from("bot_heartbeat").select("*").eq("id", 1).maybeSingle(),
-      sb.from("bot_runs").select("id,started_at,finished_at,status,trigger,error,output").order("started_at", { ascending: false }).limit(25),
+      sb.from("bot_runs").select("id,started_at,finished_at,status,trigger,error,summary:output->>summary").order("started_at", { ascending: false }).limit(25),
     ]);
     if (c.error) { msg($("actionMsg"), c.error.message, "bad"); return; }
     cfg = c.data; runs = r.data || [];
-    const hb = h.data;
-    const age = hb ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
+    const hb = h.data, age = hb ? Date.now() - new Date(hb.last_seen).getTime() : Infinity;
     if (!hb || age > STALE_MS) setBadge("OFFLINE", "bad");
     else if (hb.state === "running") setBadge("RUNNING", "ok", true);
     else if (cfg.paused) setBadge("PAUSED", "warn");
@@ -162,95 +201,219 @@
     $("botDetail").textContent = hb ? `last seen ${new Date(hb.last_seen).toLocaleString()} · ${hb.host || ""}` : "never seen";
     $("toggle").textContent = cfg.paused ? "Resume schedule" : "Pause schedule";
     if (document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "INPUT") {
-      $("task").value = cfg.task; $("interval").value = cfg.interval_minutes; $("maxRuns").value = cfg.max_runs_per_day; $("watchlist").value = (cfg.watchlist || []).join(", "); $("deep").checked = !!cfg.deep_research;
+      $("task").value = cfg.task; $("interval").value = cfg.interval_minutes; $("maxRuns").value = cfg.max_runs_per_day;
+      $("watchlist").value = (cfg.watchlist || []).join(", "); $("deep").checked = !!cfg.deep_research;
     }
     renderRuns();
   }
 
   function renderRuns() {
     const maxId = Math.max(0, ...runs.map(r => +r.id));
-    if (pending && maxId > pending.maxId) pending = null;                      // the bot started the run
-    if (pending && Date.now() - pending.at > PENDING_TIMEOUT_MS) {
-      pending = null; msg($("actionMsg"), "The bot didn't pick up the request. Is it online?", "bad");
-    }
-    const btn = $("runNow"); btn.disabled = !!pending;
-    btn.textContent = ""; if (pending) { const sp = document.createElement("span"); sp.className = "spinner"; btn.appendChild(sp); btn.append(" Queued…"); } else btn.append("Run now");
+    if (pending && maxId > pending.maxId) pending = null;
+    if (pending && Date.now() - pending.at > PENDING_TIMEOUT_MS) { pending = null; msg($("actionMsg"), "The bot didn't pick up the request. Is it online?", "bad"); }
+    const btn = $("runNow"); btn.disabled = !!pending; btn.textContent = "";
+    if (pending) { el("span", "spinner", null, btn); btn.append(" Queued…"); } else btn.append("Run now");
 
-    const tb = $("runs"); tb.textContent = "";
-    const addRow = (cells, cls, onclick) => {
-      const tr = document.createElement("tr"); if (cls) tr.className = cls;
-      for (const c of cells) { const td = document.createElement("td"); if (c instanceof Node) td.appendChild(c); else td.textContent = c; tr.appendChild(td); }
-      if (onclick) tr.onclick = onclick; tb.appendChild(tr);
-    };
-    if (!loaded) { addRow([pill("Loading runs…", "queued", true), "", "", ""], "pending"); return; }
-    if (pending) addRow(["just now", "manual", pill("queued", "queued", true), `${Math.round((Date.now() - pending.at) / 1000)}s`], "pending");
-    for (const run of runs) {
-      const running = run.status === "running";
-      const statusEl = run.status === "ok" ? pill("✓ ok", "ok") : run.status === "error" ? pill("✕ error", "err") : pill("running", "run", true);
-      const dur = Math.round(((run.finished_at ? new Date(run.finished_at) : Date.now()) - new Date(run.started_at)) / 1000) + "s";
-      addRow([new Date(run.started_at).toLocaleString(), run.trigger, statusEl, dur], "run", () => {
-        const d = $("detail"); d.classList.remove("hidden");
-        d.textContent = run.error ? "ERROR: " + run.error : (run.output && run.output.thesis ? run.output.thesis + "\n\n--- raw agent output ---\n" + JSON.stringify(run.output.raw, null, 2) : JSON.stringify(run.output, null, 2));
-      });
+    const rows = [];
+    if (!loaded) rows.push({ cells: [pill("Loading runs…", "queued", true), "", "", ""], cls: "pending" });
+    else {
+      if (pending) rows.push({ cells: ["just now", "manual", pill("queued", "queued", true), `${Math.round((Date.now() - pending.at) / 1000)}s`], cls: "pending" });
+      for (const run of runs) {
+        const status = run.status === "ok" ? pill("✓ ok", "ok") : run.status === "error" ? pill("✕ error", "err") : pill("running", "run", true);
+        const dur = Math.round(((run.finished_at ? new Date(run.finished_at) : Date.now()) - new Date(run.started_at)) / 1000) + "s";
+        const open = () => openRun(run.id);
+        const note = run.status === "error" ? "Error: " + (run.error || "").slice(0, 140) : run.summary || (run.status === "running" ? "In progress…" : "");
+        rows.push({ cells: [when(run.started_at), run.trigger, status, dur], cls: "click group", onclick: open });
+        if (note) rows.push({ cells: [note], cls: "click sub", onclick: open, span: 4 });
+      }
     }
+    fillRows("runs", rows);
   }
 
-  const usd = n => "$" + Number(n).toFixed(2);
-
-  function drawChart(points, start, bench) {
-    const svg = $("chart"); svg.textContent = "";
-    if (points.length < 2) { $("chartNote").textContent = "chart appears after 2+ snapshots"; return; }
-    $("chartNote").textContent = "";
-    const series = [
-      { color: "var(--accent)", v: points.map(p => +p.equity) },
-      ...[["BTC-USD", "var(--warn)"], ["SPY", "var(--muted)"]].map(([sym, color]) => ({
-        color, v: bench && bench[sym] ? points.map(p => p.prices && p.prices[sym] ? start * p.prices[sym] / bench[sym] : null) : [] })),
-    ];
-    const all = series.flatMap(x => x.v).filter(v => v != null);
-    const lo = Math.min(...all, start) * 0.995, hi = Math.max(...all, start) * 1.005, n = points.length - 1;
-    const X = i => (i / n) * 600, Y = v => 175 - ((v - lo) / (hi - lo || 1)) * 170;
-    const mk = (tag, attrs) => { const e = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
-    svg.appendChild(mk("line", { x1: 0, x2: 600, y1: Y(start), y2: Y(start), stroke: "var(--line)", "stroke-dasharray": "4 4" }));
-    for (const s of series) {
-      const d = s.v.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean);
-      if (d.length > 1) svg.appendChild(mk("polyline", { points: d.join(" "), fill: "none", stroke: s.color, "stroke-width": 2, "vector-effect": "non-scaling-stroke" }));
-    }
-  }
-
-  function fillRows(tbodyId, rows) {
-    const tb = $(tbodyId); tb.textContent = "";
-    for (const cells of rows) { const tr = document.createElement("tr"); for (const c of cells) { const td = document.createElement("td"); td.textContent = c; tr.appendChild(td); } tb.appendChild(tr); }
-  }
-
+  /* ------------------------------------------------------------ portfolio + chart */
   async function refreshPortfolio() {
     const [a, pos, tr, eq] = await Promise.all([
       sb.from("paper_account").select("*").eq("id", 1).single(),
       sb.from("paper_positions").select("*"),
-      sb.from("paper_trades").select("ts,symbol,side,usd,reason").order("id", { ascending: false }).limit(12),
-      sb.from("paper_equity").select("ts,equity,cash,prices").order("id", { ascending: false }).limit(500),
+      sb.from("paper_trades").select("*").order("id", { ascending: false }).limit(100),
+      sb.from("paper_equity").select("ts,equity,cash,prices").order("id", { ascending: false }).limit(1500),
     ]);
-    if (a.error) { loaded = true; setSkeleton(false); renderRuns(); return; }
-    const acct = a.data, start = +acct.starting_cash, pts = (eq.data || []).reverse(), last = pts[pts.length - 1];
-    const equity = last ? +last.equity : start;
-    loaded = true; setSkeleton(false); renderRuns();
+    loaded = true; setSkeleton(false);
+    if (a.error) { renderRuns(); return; }
+    acct = a.data; eqPoints = (eq.data || []).reverse(); tradeList = tr.data || [];
+    renderRuns();
+    const start = +acct.starting_cash, last = eqPoints[eqPoints.length - 1], equity = last ? +last.equity : start, b = acct.benchmark_start;
     $("sEquity").textContent = usd(equity);
-    $("sPnl").textContent = `${equity >= start ? "+" : ""}${usd(equity - start)} (${((equity / start - 1) * 100).toFixed(1)}%)`;
+    $("sPnl").textContent = `${equity >= start ? "+" : "-"}${usd(Math.abs(equity - start))} (${sgn((equity / start - 1) * 100, 1)}%)`;
     $("sPnl").className = equity >= start ? "ok" : "bad";
     $("sCash").textContent = usd(acct.cash);
-    const b = acct.benchmark_start;
     for (const [id, sym] of [["sBtc", "BTC-USD"], ["sSpy", "SPY"]]) {
       $(id).textContent = b && b[sym] && last && last.prices && last.prices[sym] ? usd(start * last.prices[sym] / b[sym]) : "–";
     }
-    drawChart(pts, start, b);
-    const px = (last && last.prices) || {};
+    drawChart();
+    const prices = (last && last.prices) || {};
     fillRows("positions", (pos.data || []).map(p => {
-      const now = px[p.symbol], pnl = now ? (now / p.avg_cost - 1) * 100 : null;
-      return [p.symbol, now ? usd(p.qty * now) : usd(p.qty * p.avg_cost) + " (cost)", pnl == null ? "–" : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(1)}%`,
-        `${p.stop_price ? (+p.stop_price).toPrecision(5) : "–"} / ${p.target_price ? (+p.target_price).toPrecision(5) : "–"}`];
+      const now = prices[p.symbol], pnl = now ? (now / p.avg_cost - 1) * 100 : null;
+      return { cells: [p.symbol, now ? usd(p.qty * now) : usd(p.qty * p.avg_cost) + " (cost)", pnl == null ? "–" : sgn(pnl, 1) + "%",
+        `${p.stop_price ? px(p.stop_price) : "–"} / ${p.target_price ? px(p.target_price) : "–"}`] };
     }));
-    fillRows("trades", (tr.data || []).map(t => [`${new Date(t.ts).toLocaleString()} ${t.symbol}`, t.side, usd(t.usd), t.reason || ""]));
+    if (!(pos.data || []).length) fillRows("positions", [{ cells: ["No open positions"], span: 4 }]);
+    fillRows("trades", tradeList.slice(0, 30).map(t => {
+      const detail = t.side === "sell" && t.pnl_usd != null ? `${sgn(t.pnl_usd)} (${sgn(t.pnl_pct, 1)}%)` : (t.reason || "");
+      const cell = el("span"); cell.append(pill(t.side.toUpperCase(), t.side === "buy" ? "ok" : "err"), " " + t.symbol);
+      return { cells: [when(t.ts), cell, usd(t.usd), detail], cls: "click", onclick: () => openRun(t.run_id, t.id, t) };
+    }));
+    if (!tradeList.length) fillRows("trades", [{ cells: ["No trades yet"], span: 4 }]);
   }
 
+  function drawChart() {
+    const svg = $("chart"), wrap = $("chartWrap"), tip = $("tip"); svg.textContent = ""; tip.classList.add("hidden");
+    const W = Math.max(280, wrap.clientWidth), H = 220, L = 46, R = 10, T = 10, B = 22;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("width", W);
+    const since = rangeHours ? Date.now() - rangeHours * 3600e3 : 0;
+    const pts = eqPoints.filter(p => new Date(p.ts).getTime() >= since);
+    if (!acct || pts.length < 2) { $("chartNote").textContent = "chart appears after 2+ snapshots"; return; }
+    $("chartNote").textContent = `${pts.length} points`;
+    const start = +acct.starting_cash, bench = acct.benchmark_start;
+    const times = pts.map(p => new Date(p.ts).getTime());
+    const bot = pts.map(p => +p.equity);
+    const hold = sym => pts.map(p => bench && bench[sym] && p.prices && p.prices[sym] ? start * p.prices[sym] / bench[sym] : null);
+    const series = [{ v: bot, color: "var(--accent)", w: 2.4 }, { v: hold("BTC-USD"), color: "var(--warn)", w: 1.6 }, { v: hold("SPY"), color: "var(--muted)", w: 1.6 }];
+    const vals = series.flatMap(s => s.v).filter(v => v != null).concat(start);
+    let lo = Math.min(...vals), hi = Math.max(...vals); const padv = (hi - lo || 1) * 0.08; lo -= padv; hi += padv;
+    const t0 = times[0], t1 = times[times.length - 1];
+    const X = t => L + ((t - t0) / (t1 - t0 || 1)) * (W - L - R), Y = v => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    for (let i = 0; i <= 4; i++) {                                   // grid + y labels
+      const v = lo + ((hi - lo) * i) / 4, y = Y(v);
+      svg.appendChild(svgEl("line", { x1: L, x2: W - R, y1: y, y2: y }, { stroke: "var(--line)" }));
+      const t = svgEl("text", { x: L - 6, y: y + 4, "text-anchor": "end", "font-size": 10 }, { fill: "var(--muted)" }); t.textContent = "$" + v.toFixed(2); svg.appendChild(t);
+    }
+    svg.appendChild(svgEl("line", { x1: L, x2: W - R, y1: Y(start), y2: Y(start), "stroke-dasharray": "4 4" }, { stroke: "var(--muted)", opacity: .7 }));
+    for (const [t, anchor, x] of [[t0, "start", L], [(t0 + t1) / 2, "middle", (L + W - R) / 2], [t1, "end", W - R]]) {
+      const lab = svgEl("text", { x, y: H - 6, "text-anchor": anchor, "font-size": 10 }, { fill: "var(--muted)" }); lab.textContent = when(t); svg.appendChild(lab);
+    }
+    for (const s of series) {
+      let seg = [];
+      const flush = () => { if (seg.length > 1) svg.appendChild(svgEl("polyline", { points: seg.join(" "), fill: "none", "stroke-linejoin": "round" }, { stroke: s.color, strokeWidth: s.w })); seg = []; };
+      s.v.forEach((v, i) => { if (v == null) flush(); else seg.push(`${X(times[i]).toFixed(1)},${Y(v).toFixed(1)}`); }); flush();
+    }
+    const nearest = t => { let a = 0, b = times.length - 1; while (b - a > 1) { const m = (a + b) >> 1; if (times[m] < t) a = m; else b = m; } return Math.abs(times[a] - t) <= Math.abs(times[b] - t) ? a : b; };
+    const tradesAt = {};                                              // trade markers on the bot line
+    for (const t of tradeList) {
+      const ts = new Date(t.ts).getTime(); if (ts < t0 - 6e5 || ts > t1 + 6e5) continue;
+      const i = nearest(ts); (tradesAt[i] = tradesAt[i] || []).push(t);
+    }
+    for (const [i, list] of Object.entries(tradesAt)) list.forEach((t, k) => {
+      const up = t.side === "buy", x = X(times[i]), y = Y(bot[i]) + (up ? -9 - k * 8 : 9 + k * 8);
+      const m = svgEl("polygon", { points: up ? `${x - 5},${y + 4} ${x + 5},${y + 4} ${x},${y - 5}` : `${x - 5},${y - 4} ${x + 5},${y - 4} ${x},${y + 5}`, class: "mk" }, { fill: up ? "var(--ok)" : "var(--bad)" });
+      const title = svgEl("title", {}); title.textContent = `${t.side.toUpperCase()} ${t.symbol} ${usd(t.usd)}: click for details`; m.appendChild(title);
+      m.onclick = e => { e.stopPropagation(); openRun(t.run_id, t.id, t); }; svg.appendChild(m);
+    });
+    const cross = svgEl("line", { y1: T, y2: H - B }, { stroke: "var(--muted)", opacity: 0, pointerEvents: "none" }); svg.appendChild(cross);
+    const dots = series.map(s => { const d = svgEl("circle", { r: 4 }, { fill: s.color, opacity: 0, pointerEvents: "none" }); svg.appendChild(d); return d; });
+    const show = ev => {
+      const rect = svg.getBoundingClientRect(), x = (ev.clientX - rect.left) * (W / rect.width);
+      const i = nearest(t0 + ((x - L) / (W - L - R)) * (t1 - t0)), p = pts[i], cx = X(times[i]);
+      cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.style.opacity = 1;
+      series.forEach((s, k) => { if (s.v[i] == null) dots[k].style.opacity = 0; else { dots[k].setAttribute("cx", cx); dots[k].setAttribute("cy", Y(s.v[i])); dots[k].style.opacity = 1; } });
+      const eqv = bot[i], btc = series[1].v[i], spy = series[2].v[i], invested = eqv ? (1 - p.cash / eqv) * 100 : 0;
+      tip.textContent = "";
+      el("b", "", new Date(p.ts).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }), tip);
+      for (const [label, text, color] of [
+        ["Bot", `${usd(eqv)} (${sgn((eqv / start - 1) * 100, 2)}%)`, "var(--accent)"], ["Cash", `${usd(p.cash)} · ${invested.toFixed(0)}% invested`],
+        ["BTC hold", btc == null ? "–" : usd(btc), "var(--warn)"], ["SPY hold", spy == null ? "–" : usd(spy), "var(--muted)"]]) {
+        const line = el("div", "", null, tip); const l = el("span", "", label + ": ", line); if (color) l.style.color = color; line.append(text);
+      }
+      for (const t of tradesAt[i] || []) el("div", "", `${t.side === "buy" ? "▲ Bought" : "▼ Sold"} ${t.symbol} ${usd(t.usd)}`, tip).style.color = t.side === "buy" ? "var(--ok)" : "var(--bad)";
+      tip.classList.remove("hidden");
+      tip.style.left = Math.min(Math.max(4, (cx / W) * rect.width - tip.offsetWidth / 2), rect.width - tip.offsetWidth - 4) + "px";
+    };
+    const hide = () => { cross.style.opacity = 0; dots.forEach(d => d.style.opacity = 0); tip.classList.add("hidden"); };
+    svg.onpointermove = show; svg.onpointerdown = show; svg.onpointerleave = hide;
+  }
+
+  for (const b of document.querySelectorAll("[data-range]")) b.onclick = () => {
+    rangeHours = +b.dataset.range;
+    document.querySelectorAll("[data-range]").forEach(x => x.classList.toggle("on", x === b)); drawChart();
+  };
+  let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(drawChart, 150); });
+
+  /* ------------------------------------------------------------ run / trade detail drawer */
+  function section(parent, title, text) {
+    if (!text) return; el("h3", "", title, parent); el("p", "block", text, parent);
+  }
+
+  function tradeCard(t, focus) {
+    const card = el("div", "tcard" + (focus ? " focus" : "")); card.dataset.trade = t.id;
+    const head = el("div", "head", null, card), auto = (t.rationale || "").startsWith("Automatic rule");
+    head.appendChild(pill(t.side.toUpperCase(), t.side === "buy" ? "ok" : "err"));
+    el("strong", "", `${t.symbol} · ${usd(t.usd)} @ ${px(t.price)}`, head);
+    head.appendChild(pill(auto ? "automatic exit" : "model decision", auto ? "queued" : "run"));
+    el("span", "muted", when(t.ts), head);
+    const m = el("div", "metrics", null, card);
+    const metric = (label, value) => { const d = el("div", "", null, m); el("span", "", label, d); d.append(value); };
+    metric("Quantity", px(t.qty)); metric("Fee", usd(t.fee));
+    metric(t.side === "buy" ? "Avg cost after" : "Cost basis", px(t.avg_cost));
+    if (t.stop_price) metric("Stop", px(t.stop_price));
+    if (t.target_price) metric("Target", px(t.target_price));
+    if (t.confidence) metric("Confidence", "●".repeat(t.confidence) + "○".repeat(5 - t.confidence) + ` ${t.confidence}/5`);
+    if (t.side === "sell" && t.pnl_usd != null) metric("Realized P&L", `${sgn(t.pnl_usd)} (${sgn(t.pnl_pct, 1)}%)`);
+    el("h3", "", "Why", card).style.margin = "4px 0";
+    el("div", "why", t.rationale || t.reason || "No justification was recorded for this trade.", card);
+    return card;
+  }
+
+  async function openRun(runId, focusTradeId, tradeHint) {
+    const body = $("drawerBody"); body.textContent = ""; $("drawer").classList.remove("hidden"); document.body.style.overflow = "hidden";
+    el("p", "muted", "Loading…", body);
+    if (!runId) {                                                      // trade with no parent run (automatic check)
+      body.textContent = ""; el("h2", "", "Trade detail", body);
+      el("p", "muted", "This exit came from the automatic price check between model cycles, so there is no model run attached.", body);
+      if (tradeHint) body.appendChild(tradeCard(tradeHint, true)); return;
+    }
+    const [r, tr, eq] = await Promise.all([
+      sb.from("bot_runs").select("*").eq("id", runId).single(),
+      sb.from("paper_trades").select("*").eq("run_id", runId).order("id"),
+      sb.from("paper_equity").select("equity,cash,ts").eq("run_id", runId).order("id", { ascending: false }).limit(1),
+    ]);
+    body.textContent = "";
+    if (r.error) { el("p", "bad", "Could not load this run: " + r.error.message, body); return; }
+    const run = r.data, out = run.output || {}, raw = out.raw || {}, dec = raw.decision, trades = tr.data || [];
+    const dur = run.finished_at ? Math.round((new Date(run.finished_at) - new Date(run.started_at)) / 1000) + "s" : "…";
+    el("h2", "", `Run #${run.id} · ${when(run.started_at)}`, body);
+    const meta = el("div", "row", null, body);
+    meta.appendChild(run.status === "ok" ? pill("✓ ok", "ok") : run.status === "error" ? pill("✕ error", "err") : pill("running", "run", true));
+    meta.appendChild(pill(run.trigger, "gray")); el("span", "muted", dur, meta);
+    if (out.summary) el("p", "block", out.summary, body).style.marginTop = "8px";
+    if (run.error) { el("h3", "", "Error", body); el("p", "block bad", run.error, body); }
+    if (dec) {
+      section(body, "Market read", dec.summary); section(body, "Best setups, ranked", dec.ranking);
+      section(body, "Reasoning", dec.thesis); section(body, "What would change the view", dec.risks);
+    } else if (out.thesis) section(body, "Research thesis", out.thesis);
+    if (run.task === "paper trading decision" || trades.length || dec) {
+      el("h3", "", `Trades in this run (${trades.length})`, body);
+      if (!trades.length) el("p", "muted", "No trades: the model chose to hold. See its reasoning above for what it was waiting for.", body);
+      for (const t of trades) body.appendChild(tradeCard(t, t.id === focusTradeId));
+      const rej = raw.rejected || [];
+      if (rej.length) {
+        el("h3", "", "Orders the engine rejected", body);
+        for (const x of rej) el("p", "block", `${(x.order || {}).action || "?"} ${(x.order || {}).symbol || "?"}: ${x.why}${(x.order || {}).reason ? ` (model's reason: ${x.order.reason})` : ""}`, body);
+      }
+    }
+    const e0 = (eq.data || [])[0];
+    if (e0 && acct) { el("h3", "", "Account after this run", body); el("p", "block", `Equity ${usd(e0.equity)} (${sgn((e0.equity / +acct.starting_cash - 1) * 100, 2)}%), cash ${usd(e0.cash)}`, body); }
+    if (out.raw || out.thesis) {
+      const d = el("details", "", null, body); el("summary", "muted", "Raw output", d);
+      el("pre", "", JSON.stringify(raw.decision ? { decision: raw.decision, stops: raw.stops, prompt_chars: raw.prompt_chars } : out.raw, null, 2).slice(0, 30000), d);
+    }
+    if (focusTradeId) { const f = body.querySelector(`[data-trade="${focusTradeId}"]`); if (f) f.scrollIntoView({ block: "center" }); }
+  }
+  function closeDrawer() { $("drawer").classList.add("hidden"); document.body.style.overflow = ""; }
+  $("drawerClose").onclick = closeDrawer;
+  $("drawer").onclick = e => { if (e.target === $("drawer")) closeDrawer(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+
+  /* ------------------------------------------------------------ auth, polling, controls */
   async function show() {
     const { data } = await sb.auth.getSession();
     const on = !!data.session;
@@ -258,7 +421,6 @@
     clearTimeout(timer);
     if (on) { if (!loaded) { setSkeleton(true); renderRuns(); } tick(); }
   }
-
   async function tick() {
     clearTimeout(timer);
     try { await tracked(() => Promise.all([refresh(), refreshPortfolio()])); } catch (e) { console.error(e); }

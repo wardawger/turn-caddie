@@ -106,6 +106,25 @@ def test_exit_plans():
     assert st.positions()["BTC-USD"]["stop_price"] and st.positions()["BTC-USD"]["target_price"]
 
 
+def test_trade_details():
+    quotes = {"BTC-USD": quote(100.0), "SPY": quote(500.0), "ETH-USD": quote(10.0)}
+    st = paper.MemoryStore(50.0)
+    paper.apply_orders(st, quotes, [{"symbol": "BTC-USD", "action": "buy", "usd": 10, "stop_pct": 5, "target_pct": 10,
+                                     "confidence": 9, "reason": "r", "rationale": "long reasoning"}], list(quotes), 7)
+    buy = st.trades[0]
+    assert buy["rationale"] == "long reasoning" and buy["confidence"] == 5 and buy["stop_price"] and buy["target_price"] and buy["avg_cost"]
+    paper.apply_orders(st, dict(quotes, **{"BTC-USD": quote(110.0)}), [{"symbol": "BTC-USD", "action": "sell", "pct": 100, "reason": "take profit"}], list(quotes), 8)
+    sell = st.trades[1]
+    assert sell["pnl_usd"] > 0 and 8 < sell["pnl_pct"] < 10 and sell["rationale"] == "take profit"
+    # auto exit explains itself
+    paper.apply_orders(st, quotes, [{"symbol": "ETH-USD", "action": "buy", "usd": 10, "stop_pct": 5, "reason": "r"}], list(quotes), 9)
+    _, exits = paper.mark_to_market(st, dict(quotes, **{"ETH-USD": quote(9.0)}), 10)
+    assert "Automatic rule" in exits[0]["rationale"] and exits[0]["pnl_usd"] < 0
+    out = paper.paper_cycle(paper.MemoryStore(50.0), ["ETH-USD"], {"ETH-USD": quote(10.0), "BTC-USD": quote(1.0), "SPY": quote(1.0)},
+                            lambda s, u: '{"summary":"s","thesis":"t","orders":[{"symbol":"ETH-USD","action":"buy","usd":5,"reason":"r"}]}')
+    assert out["summary"].startswith("Bought ETH-USD $5.00") and "equity $" in out["summary"]
+
+
 def test_runner_flow():
     fake = FakeDB()
     fake.tables["bot_config"] = [{"id": 1, "paused": False, "task": "t", "watchlist": ["BTC-USD", "ETH-USD", "BAD SYMBOL!"], "deep_research": False}]
@@ -127,4 +146,4 @@ def test_runner_flow():
 
 
 if __name__ == "__main__":
-    test_engine(); test_exit_plans(); test_runner_flow(); print("all tests passed")
+    test_engine(); test_exit_plans(); test_trade_details(); test_runner_flow(); print("all tests passed")

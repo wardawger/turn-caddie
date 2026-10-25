@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 load_dotenv(Path(__file__).parent / ".env")
 
 POLL_SECONDS = 30
+MARK_MINUTES = 15  # free price-only valuation, so the chart has a point every ~15 minutes
 DATA_DIR = Path(os.getenv("AUTOHEDGE_DATA_DIR", Path(__file__).parent / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.chdir(DATA_DIR)  # AutoHedge writes ./outputs relative to cwd
@@ -123,7 +124,7 @@ def llm(system, user):
 
     litellm.drop_params = True  # newer models reject some sampling params (e.g. temperature)
     resp = litellm.completion(
-        model=MODEL_OVERRIDE or "gpt-4.1-mini", max_tokens=1200,
+        model=MODEL_OVERRIDE or "gpt-4.1-mini", max_tokens=2500,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
     )
     return resp.choices[0].message.content
@@ -187,7 +188,7 @@ def run_paper(cfg, trigger):
 
 
 def mark_only():
-    """Cheap hourly valuation (no model call): applies the automatic stop-loss and records equity."""
+    """Cheap valuation (no model call): applies the automatic stop-loss and records equity."""
     import paper
 
     store = paper.Store(db)
@@ -224,7 +225,7 @@ def main():
                 if due and runs_today() < cfg["max_runs_per_day"]:
                     run_paper(cfg, "schedule")
                     last_mark = now()
-                elif now() - last_mark >= timedelta(minutes=60):
+                elif now() - last_mark >= timedelta(minutes=MARK_MINUTES):
                     heartbeat("marking")
                     mark_only()
                     last_mark = now()

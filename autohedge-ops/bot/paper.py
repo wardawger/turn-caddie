@@ -166,7 +166,7 @@ def portfolio_value(store, quotes):
     return float(acct["cash"]) + value
 
 
-def _sell(store, quotes, sym, pct, reason, run_id):
+def _sell(store, quotes, sym, pct, reason, run_id, rationale=None, confidence=None):
     pos = store.positions().get(sym)
     if not pos:
         return None, "no position"
@@ -179,13 +179,17 @@ def _sell(store, quotes, sym, pct, reason, run_id):
     acct = store.account()
     store.save_account(cash=float(acct["cash"]) + proceeds - fee)
     store.set_position(sym, pos["qty"] - qty, pos["avg_cost"], pos.get("stop_price"), pos.get("target_price"))
+    net = proceeds - fee
     row = {"symbol": sym, "side": "sell", "qty": qty, "price": px, "usd": proceeds, "fee": fee,
-           "reason": reason[:300], "run_id": run_id}
+           "reason": reason[:300], "run_id": run_id, "rationale": (rationale or reason)[:1500],
+           "confidence": confidence, "stop_price": pos.get("stop_price"), "target_price": pos.get("target_price"),
+           "avg_cost": pos["avg_cost"], "pnl_usd": net - qty * pos["avg_cost"],
+           "pnl_pct": (px * (1 - FEE_RATE) / pos["avg_cost"] - 1) * 100}
     store.add_trade(row)
     return row, None
 
 
-def _buy(store, quotes, sym, usd, reason, run_id, stop_pct=None, target_pct=None):
+def _buy(store, quotes, sym, usd, reason, run_id, stop_pct=None, target_pct=None, rationale=None, confidence=None):
     acct, pos = store.account(), store.positions()
     cash = float(acct["cash"])
     equity = portfolio_value(store, quotes)
@@ -208,7 +212,8 @@ def _buy(store, quotes, sym, usd, reason, run_id, stop_pct=None, target_pct=None
     store.save_account(cash=cash - usd)
     store.set_position(sym, new_qty, avg, stop, target)
     row = {"symbol": sym, "side": "buy", "qty": qty, "price": px, "usd": usd, "fee": fee,
-           "reason": reason[:300], "run_id": run_id}
+           "reason": reason[:300], "run_id": run_id, "rationale": (rationale or reason)[:1500],
+           "confidence": confidence, "stop_price": stop, "target_price": target, "avg_cost": avg}
     store.add_trade(row)
     return row, None
 
@@ -227,15 +232,18 @@ def apply_orders(store, quotes, orders, watchlist, run_id=None):
             sym = str(o.get("symbol", "")).upper()
             action = str(o.get("action", "")).lower()
             reason = str(o.get("reason", ""))
+            rationale = str(o.get("rationale") or "")
+            conf = _num(o.get("confidence"))
+            conf = None if conf is None else int(min(max(round(conf), 1), 5))
             if sym not in watchlist:
                 raise ValueError("not on watchlist")
             if not tradable(sym, quotes):
                 raise ValueError("market closed or no fresh price")
             if action == "buy":
                 row, err = _buy(store, quotes, sym, float(o.get("usd", 0)), reason, run_id,
-                                _num(o.get("stop_pct")), _num(o.get("target_pct")))
+                                _num(o.get("stop_pct")), _num(o.get("target_pct")), rationale, conf)
             elif action == "sell":
-                row, err = _sell(store, quotes, sym, float(o.get("pct", 100)), reason, run_id)
+                row, err = _sell(store, quotes, sym, float(o.get("pct", 100)), reason, run_id, rationale, conf)
             else:
                 raise ValueError("action must be buy or sell")
             if err:
@@ -258,11 +266,17 @@ def mark_to_market(store, quotes, run_id=None, now=None):
         stop = max(p["stop_price"], floor) if p.get("stop_price") else floor
         if px <= stop:
             why = f"auto exit: stop hit at {stop:.4g}"
+            detail = (f"Automatic rule, not a model decision. {sym} traded at {px:.4g}, at or below its stop of {stop:.4g} "
+                      f"(average cost {p['avg_cost']:.4g}; the stop is the higher of the model's stop and the hard {STOP_LOSS_PCT * 100:.0f}% floor). "
+                      "The whole position was sold to cap the loss.")
         elif p.get("target_price") and px >= p["target_price"]:
             why = f"auto exit: target hit at {p['target_price']:.4g}"
+            detail = (f"Automatic rule, not a model decision. {sym} traded at {px:.4g}, at or above the profit target of "
+                      f"{p['target_price']:.4g} set when the position was opened (average cost {p['avg_cost']:.4g}). "
+                      "The whole position was sold to lock in the gain.")
         else:
             continue
-        row, _ = _sell(store, quotes, sym, 100, why, run_id)
+        row, _ = _sell(store, quotes, sym, 100, why, run_id, rationale=detail)
         if row:
             stops.append(row)
     acct = store.account()
@@ -302,9 +316,12 @@ Reply with ONLY a JSON object, no prose outside it:
 {"summary": "2-3 sentence market read",
  "ranking": "top 2-3 setups with the key numbers behind each",
  "thesis": "why you are acting or waiting, citing numbers from the data",
- "orders": [{"symbol": "BTC-USD", "action": "buy", "usd": 10, "stop_pct": 6, "target_pct": 15, "reason": "short reason"},
-            {"symbol": "SPY", "action": "sell", "pct": 50, "reason": "short reason"}],
- "risks": "what would change your mind"}"""
+ "orders": [{"symbol": "BTC-USD", "action": "buy", "usd": 10, "stop_pct": 6, "target_pct": 15, "confidence": 3,
+             "reason": "one-line reason",
+             "rationale": "3-5 sentences the owner will read to audit this trade: the specific numbers and news that support it, why this size, why this stop and target, what you considered instead, and what would prove you wrong"},
+            {"symbol": "SPY", "action": "sell", "pct": 50, "confidence": 4, "reason": "one-line reason", "rationale": "..."}],
+ "risks": "what would change your mind"}
+confidence is 1-5 (5 = highest). Every order needs both reason and rationale."""
 
 
 def _fmt(v, suffix="%"):
@@ -370,5 +387,9 @@ def paper_cycle(store, watchlist, quotes, llm, news="", deep_thesis="", run_id=N
             f"**Risks / what changes the view:** {decision.get('risks', '')}")
     if rejected:
         text += "\n\n**Rejected orders:** " + "; ".join(f"{r['order'].get('symbol')} ({r['why']})" for r in rejected)
-    return {"thesis": text, "raw": {"decision": decision, "executed": executed, "stops": stops,
+    equity_pct = (equity / float(acct["starting_cash"]) - 1) * 100
+    acts_short = [f"{'Bought' if r['side'] == 'buy' else 'Sold'} {r['symbol']} ${r['usd']:.2f}" + (" (auto)" if r in stops else "")
+                  for r in executed + stops]
+    summary = (" · ".join(acts_short) if acts_short else "Held, no trades") + f" · equity ${equity:.2f} ({equity_pct:+.1f}%)"
+    return {"thesis": text, "summary": summary, "equity": equity, "raw": {"decision": decision, "executed": executed, "stops": stops,
                                     "rejected": rejected, "prompt_chars": len(prompt)}}

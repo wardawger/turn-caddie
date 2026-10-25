@@ -111,7 +111,7 @@
       for (const t of [new Date(run.started_at).toLocaleString(), run.trigger, run.status, dur]) {
         const td = document.createElement("td"); td.textContent = t; tr.appendChild(td);
       }
-      tr.onclick = () => { const d = $("detail"); d.classList.remove("hidden"); d.textContent = run.error ? "ERROR: " + run.error : JSON.stringify(run.output, null, 2); };
+      tr.onclick = () => { const d = $("detail"); d.classList.remove("hidden"); d.textContent = run.error ? "ERROR: " + run.error : (run.output && run.output.thesis ? run.output.thesis + "\n\n--- raw agent output ---\n" + JSON.stringify(run.output.raw, null, 2) : JSON.stringify(run.output, null, 2)); };
       tb.appendChild(tr);
     }
   }

@@ -20,6 +20,24 @@ DATA_DIR = Path(os.getenv("AUTOHEDGE_DATA_DIR", Path(__file__).parent / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.chdir(DATA_DIR)  # AutoHedge writes ./outputs relative to cwd
 
+MODEL_OVERRIDE = os.getenv("AUTOHEDGE_MODEL", "").strip()
+
+
+def apply_model_override():
+    """AutoHedge hard-codes OpenAI model names; swap them for AUTOHEDGE_MODEL (e.g. anthropic/claude-haiku-5-5)."""
+    if not MODEL_OVERRIDE:
+        return
+    from swarms import Agent
+
+    original = Agent.__init__
+
+    def patched(self, *args, **kwargs):
+        kwargs["model_name"] = MODEL_OVERRIDE
+        original(self, *args, **kwargs)
+
+    Agent.__init__ = patched
+
+
 db = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 HOST = socket.gethostname()
 
@@ -53,6 +71,7 @@ def run_cycle(task, trigger):
     run = db.table("bot_runs").insert({"task": task, "trigger": trigger}).execute().data[0]
     heartbeat("running", f"run {run['id']}")
     try:
+        apply_model_override()  # must run before autohedge builds its agents
         from autohedge import AutoHedge  # imported lazily so the heartbeat works without LLM keys
 
         output = AutoHedge(name="autohedge", output_type="dict").run(task=task)

@@ -29,7 +29,7 @@ def patch_agents():
     """AutoHedge hard-codes OpenAI models and gives the Quant agent no data tools; fix both."""
     from swarms import Agent
 
-    from market_tools import market_snapshot
+    from market_tools import market_snapshot, news_search
 
     original = Agent.__init__
 
@@ -43,6 +43,9 @@ def patch_agents():
                 "(e.g. CL=F WTI crude, BZ=F Brent, SPY, BTC-USD) and base every figure on its output. "
                 "Never invent prices; say what you could not get."
             )
+        if kwargs.get("agent_name") == "Sentiment-Agent":
+            # AutoHedge's bundled Exa tool returns 2 results truncated to 20 characters.
+            kwargs["tools"] = [news_search]
         original(self, *args, **kwargs)
 
     Agent.__init__ = patched
@@ -55,7 +58,7 @@ def synthesize(task, messages):
     text = json.dumps(messages, default=str)[:60000]
     resp = litellm.completion(
         model=MODEL_OVERRIDE or "gpt-4.1",
-        max_tokens=1500,
+        max_tokens=3000,
         messages=[
             {"role": "system", "content": "You are a hedge-fund research editor. Write a concise markdown thesis "
              "(max ~350 words) from the agents' output: overall view, key drivers, quant levels with real numbers "

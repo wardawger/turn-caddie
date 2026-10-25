@@ -46,3 +46,45 @@ def market_snapshot(ticker: str) -> str:
         })
     except Exception as e:
         return json.dumps({"error": str(e)[:300]})
+
+
+def news_search(query: str) -> str:
+    """
+    Search recent web news (Exa) and return the latest articles with real text excerpts.
+
+    Args:
+        query (str): Natural-language search query, e.g. 'crude oil market sentiment OPEC outlook this week'.
+
+    Returns:
+        str: JSON list of up to 8 results, each with title, url, publishedDate and a text excerpt.
+    """
+    import os
+    from datetime import datetime, timedelta, timezone
+
+    import httpx
+
+    key = os.getenv("EXA_API_KEY")
+    if not key:
+        return json.dumps({"error": "EXA_API_KEY not set"})
+    since = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00.000Z")
+    try:
+        r = httpx.post(
+            "https://api.exa.ai/search",
+            headers={"x-api-key": key, "content-type": "application/json"},
+            json={
+                "query": query,
+                "type": "auto",
+                "category": "news",
+                "numResults": 8,
+                "startPublishedDate": since,
+                "contents": {"text": {"maxCharacters": 1200}},
+            },
+            timeout=45,
+        )
+        r.raise_for_status()
+        return json.dumps([
+            {k: x.get(k) for k in ("title", "url", "publishedDate", "text")}
+            for x in r.json().get("results", [])
+        ])
+    except Exception as e:
+        return json.dumps({"error": str(e)[:300]})

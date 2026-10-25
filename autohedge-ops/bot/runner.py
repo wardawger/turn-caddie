@@ -6,6 +6,7 @@ trade-execution tool attached. Do not add wallet keys to this environment.
 import json
 import os
 import socket
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,6 +38,12 @@ def apply_model_override():
 
     Agent.__init__ = patched
 
+
+if sys.stdout is None or sys.stderr is None:
+    # pythonw.exe (hidden Windows launch) has no console; swarms/loguru crash on a None stdout.
+    _log = open(DATA_DIR / "runner.log", "a", buffering=1, encoding="utf-8")
+    sys.stdout = sys.stdout or _log
+    sys.stderr = sys.stderr or _log
 
 db = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 HOST = socket.gethostname()
